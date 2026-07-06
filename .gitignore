@@ -12,10 +12,6 @@ runtime/cache/
 runtime/logs/
 runtime/recordings/
 
-# Vendored SDK: already its own git repo, read-only reference material,
-# not part of this repo's history (never modified per project convention).
-vendor/
-
 # Env
 .env
 .env.local

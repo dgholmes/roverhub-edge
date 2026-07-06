@@ -1,0 +1,3 @@
+[submodule "vendor/dobot_quad_sdk"]
+	path = vendor/dobot_quad_sdk
+	url = https://github.com/Dobot-Team/dobot_quad_sdk.git
