@@ -18,3 +18,4 @@ runtime/recordings/
 
 # OS/editor
 .DS_Store
+.superpowers/
