@@ -179,3 +179,27 @@ def test_teleop_controller_adjust_height():
     controller.adjust_height(-0.05)
     state = client.get_state()
     assert state.robot_state.ori_body is not None  # height isn't tracked in ori_body; call must not raise
+
+
+def test_teleop_controller_enter_walk_mode_skips_balance_stand_on_wheel():
+    client = SimulatedRobotClient(robot_type="wheel", verbose=False)
+
+    def _fail(*a, **kw):
+        raise AssertionError("balance_stand must not be called for wheel robots")
+
+    client.balance_stand = _fail
+    controller = TeleopController(client, tick_seconds=0.1)
+    controller.enter_walk_mode()
+    assert client.get_current_state_name() == "wheel_loco"
+
+
+def test_teleop_controller_posture_mode_unavailable_on_wheel():
+    client = SimulatedRobotClient(robot_type="wheel", verbose=False)
+
+    def _fail(*a, **kw):
+        raise AssertionError("balance_stand must not be called for wheel robots")
+
+    client.balance_stand = _fail
+    controller = TeleopController(client, tick_seconds=0.1)
+    controller.enter_walk_mode()
+    assert controller.toggle_mode() == "WALK"

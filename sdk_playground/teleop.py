@@ -165,10 +165,16 @@ class TeleopController:
         self.mode = "WALK"
         if self.client.get_current_state_name() not in ("walk", "flying_trot", "wheel_loco"):
             self.client.ready(show_progress=False)
-            self.client.balance_stand(show_progress=False)
+            if not self.client.is_quad_wheel():
+                self.client.balance_stand(show_progress=False)
             self.client.set_target_state(self.gait, show_progress=False)
 
     def enter_posture_mode(self) -> None:
+        if self.client.is_quad_wheel():
+            # Balance/posture motions are not supported on MINI_QUAD_WHEEL
+            # (docs/03-sdk-integration.md §4.6). Tab becomes a no-op on wheel
+            # robots — stay in WALK mode, matching feature_tester.py's guard.
+            return
         self.mode = "POSTURE"
         if self.client.get_current_state_name() != "balance_stand":
             self.client.ready(show_progress=False)
