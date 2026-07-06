@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+.venv/
+venv/
+.pytest_cache/
+
+# Runtime artifacts (generated, not source)
+runtime/cache/
+runtime/logs/
+runtime/recordings/
+
+# Vendored SDK: already its own git repo, read-only reference material,
+# not part of this repo's history (never modified per project convention).
+vendor/
+
+# Env
+.env
+.env.local
+
+# OS/editor
+.DS_Store
