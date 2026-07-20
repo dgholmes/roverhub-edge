@@ -34,12 +34,14 @@ class TelemetryReader:
         on_frame: FrameHandler,
         clock: Clock = _default_clock,
         on_state_change: Optional[StateChangeHandler] = None,
+        estop_active_provider: Callable[[], bool] = lambda: False,
     ):
         self._adapter = adapter
         self._config = config
         self._on_frame = on_frame
         self._clock = clock
         self._on_state_change = on_state_change
+        self._estop_active_provider = estop_active_provider
         self._last_snapshot: Optional[TelemetrySnapshot] = None
         self._last_received_at: Optional[float] = None
         self._last_abstract_state: Optional[str] = None
@@ -85,7 +87,7 @@ class TelemetryReader:
         if self._on_state_change is not None:
             abstract_state = compute_abstract_state(
                 sdk_state=self._last_snapshot.current_state,
-                estop_active=False,
+                estop_active=self._estop_active_provider(),
                 obstacle_avoidance_enabled=self._last_snapshot.obstacle_avoidance_enabled,
             )
             if abstract_state != self._last_abstract_state:

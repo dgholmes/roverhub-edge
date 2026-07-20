@@ -91,7 +91,10 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
 
     connection.subscribe_commands(on_command_bytes)
 
-    reader = TelemetryReader(adapter, config, on_frame, on_state_change=on_state_change)
+    reader = TelemetryReader(
+        adapter, config, on_frame, on_state_change=on_state_change,
+        estop_active_provider=lambda: safety.estop_active,
+    )
     heartbeat = HeartbeatSender(adapter, config, on_heartbeat)
 
     logger.info("robot_bridge started: robot_type=%s bridge_id=%s", robot_type, config.bridge_id)

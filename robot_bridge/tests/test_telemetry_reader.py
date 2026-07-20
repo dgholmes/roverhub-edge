@@ -129,3 +129,26 @@ async def test_on_state_change_does_not_fire_when_state_is_unchanged(make_config
     await reader.poll_once()
 
     assert len(state_changes) == 1
+
+
+@pytest.mark.asyncio
+async def test_estop_active_reports_e_stop_instead_of_fault(make_config):
+    state_changes = []
+
+    async def on_frame(frame):
+        pass
+
+    async def on_state_change(sdk_state, abstract_state):
+        state_changes.append((sdk_state, abstract_state))
+
+    adapter = _StubAdapter([_snapshot(current_state="passive")])
+    reader = TelemetryReader(
+        adapter, make_config(), on_frame,
+        clock=lambda: datetime.now(timezone.utc),
+        on_state_change=on_state_change,
+        estop_active_provider=lambda: True,
+    )
+
+    await reader.poll_once()
+
+    assert state_changes == [("passive", "E_STOP")]
