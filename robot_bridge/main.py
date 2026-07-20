@@ -1,18 +1,37 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import uuid
 from datetime import datetime, timezone
 
+from command_sender import CommandSender
 from config import BridgeConfig
 from connection_manager import ConnectionManager, real_mqtt_client_factory
 from dobot_adapter import DobotAdapter, real_client_factory
 from heartbeat import HeartbeatSender
+from safety_manager import SafetyManager
 from shared.schemas.bridge_status import StateUpdate
+from shared.schemas.commands import Command
 from telemetry_reader import TelemetryReader
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("robot_bridge.main")
+
+
+class _LatestBattery:
+    """Shared holder so command_sender's safety check can read the most
+    recently observed battery level without polling the adapter again."""
+
+    def __init__(self) -> None:
+        self.percent = 100.0
+
+    def update(self, percent: float) -> None:
+        self.percent = percent
+
+    def read(self) -> float:
+        return self.percent
 
 
 async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_client_factory=real_mqtt_client_factory) -> None:
@@ -22,6 +41,8 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
 
     adapter = DobotAdapter(client_factory)
     connection = ConnectionManager(config, mqtt_client_factory)
+    safety = SafetyManager(config)
+    latest_battery = _LatestBattery()
 
     await adapter.connect()
     robot_type = await adapter.get_robot_config()
@@ -30,6 +51,7 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
 
     async def on_frame(frame):
         connection.publish_telemetry(frame)
+        latest_battery.update(frame.battery_percent)
 
     async def on_state_change(sdk_state, abstract_state):
         connection.publish_state(StateUpdate(
@@ -40,6 +62,28 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
 
     async def on_heartbeat(payload):
         connection.publish_heartbeat(payload)
+
+    sender = CommandSender(adapter, safety, on_ack=connection.publish_ack, battery_percent_provider=latest_battery.read)
+
+    loop = asyncio.get_event_loop()
+
+    def on_command_bytes(payload: bytes) -> None:
+        try:
+            data = json.loads(payload)
+            command = Command(
+                command_id=data.get("command_id", str(uuid.uuid4())),
+                robot_id=config.robot_id,
+                type=data["type"],
+                label=data.get("label", data["type"]),
+                params=data.get("params"),
+                initiated_by=data.get("initiated_by", "unknown"),
+            )
+        except Exception:
+            logger.warning("dropping unparseable command payload: %r", payload)
+            return
+        asyncio.run_coroutine_threadsafe(sender.handle_command(command), loop)
+
+    connection.subscribe_commands(on_command_bytes)
 
     reader = TelemetryReader(adapter, config, on_frame, on_state_change=on_state_change)
     heartbeat = HeartbeatSender(adapter, config, on_heartbeat)
