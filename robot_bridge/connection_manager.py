@@ -5,6 +5,7 @@ from typing import Callable, Tuple
 
 from config import BridgeConfig
 from shared.schemas.bridge_status import HeartbeatPayload, StateUpdate
+from shared.schemas.commands import Command
 from shared.schemas.telemetry import TelemetryFrame
 
 MqttClientFactory = Callable[[], object]
@@ -55,6 +56,15 @@ class ConnectionManager:
     def publish_heartbeat(self, payload: HeartbeatPayload) -> None:
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/heartbeat"
         self._client.publish(topic, payload.model_dump_json(), qos=0)
+
+    def subscribe_commands(self, on_command: Callable[[bytes], None]) -> None:
+        topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/commands"
+        self._client.on_message = lambda client, userdata, message: on_command(message.payload)
+        self._client.subscribe(topic, qos=1)
+
+    def publish_ack(self, command: Command) -> None:
+        topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/ack"
+        self._client.publish(topic, command.model_dump_json(), qos=1)
 
     @staticmethod
     def _parse_broker_url(url: str) -> Tuple[str, int]:

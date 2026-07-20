@@ -3,13 +3,16 @@ import json
 from connection_manager import ConnectionManager
 from shared.schemas.telemetry import TelemetryFrame
 from shared.schemas.bridge_status import HeartbeatPayload, StateUpdate
+from shared.schemas.commands import Command
 
 
 class _FakeMqttClient:
     def __init__(self):
         self.connected_to = None
         self.published = []
+        self.subscriptions = []
         self.loop_started = False
+        self.on_message = None
 
     def connect(self, host, port):
         self.connected_to = (host, port)
@@ -25,6 +28,9 @@ class _FakeMqttClient:
 
     def publish(self, topic, payload, qos=0):
         self.published.append((topic, payload, qos))
+
+    def subscribe(self, topic, qos=0):
+        self.subscriptions.append((topic, qos))
 
 
 def test_connect_parses_broker_url_and_starts_loop(make_config):
@@ -92,3 +98,38 @@ def test_publish_heartbeat_uses_site_robot_heartbeat_topic(make_config):
     topic, payload, qos = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/heartbeat"
     assert qos == 0
+
+
+def test_subscribe_commands_subscribes_to_commands_topic(make_config):
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    manager.subscribe_commands(lambda payload: None)
+    assert ("roverhub/site-x/robot-x/commands", 1) in fake.subscriptions
+
+
+def test_subscribe_commands_forwards_incoming_payload(make_config):
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    received = []
+    manager.subscribe_commands(received.append)
+
+    class _FakeMessage:
+        payload = b'{"type": "ESTOP"}'
+
+    fake.on_message(fake, None, _FakeMessage())
+
+    assert received == [b'{"type": "ESTOP"}']
+
+
+def test_publish_ack_uses_site_robot_ack_topic(make_config):
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    command = Command(
+        command_id="cmd-1", robot_id="robot-x", type="ESTOP", label="E-Stop",
+        current_stage="execution_completed", initiated_by="operator-1",
+    )
+    manager.publish_ack(command)
+    topic, payload, qos = fake.published[-1]
+    assert topic == "roverhub/site-x/robot-x/ack"
+    assert qos == 1
+    assert json.loads(payload)["command_id"] == "cmd-1"
