@@ -65,7 +65,12 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
 
     sender = CommandSender(adapter, safety, on_ack=connection.publish_ack, battery_percent_provider=latest_battery.read)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
+
+    def _log_command_failure(future: "asyncio.Future") -> None:
+        exc = future.exception()
+        if exc is not None:
+            logger.error("unhandled error while executing command: %r", exc)
 
     def on_command_bytes(payload: bytes) -> None:
         try:
@@ -81,7 +86,8 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
         except Exception:
             logger.warning("dropping unparseable command payload: %r", payload)
             return
-        asyncio.run_coroutine_threadsafe(sender.handle_command(command), loop)
+        future = asyncio.run_coroutine_threadsafe(sender.handle_command(command), loop)
+        future.add_done_callback(_log_command_failure)
 
     connection.subscribe_commands(on_command_bytes)
 

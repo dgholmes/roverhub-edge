@@ -75,8 +75,8 @@ class CommandSender:
         elif command.type == "RESET_ESTOP":
             if sdk_state != "passive":
                 raise RuntimeError("robot is not in passive state; cannot clear E-Stop")
-            self._safety.clear_estop()
             await self._adapter.set_state(RECOVERY_TARGET_STATE)
+            self._safety.clear_estop()
         elif command.type == "SET_OBSTACLE_AVOIDANCE":
             enabled = bool((command.params or {}).get("enabled", True))
             await self._adapter.enable_obstacle_avoidance(enabled)

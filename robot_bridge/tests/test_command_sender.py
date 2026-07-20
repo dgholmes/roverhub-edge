@@ -111,3 +111,18 @@ async def test_low_battery_rejects_and_reports_failure_reason(make_config):
 
     assert acks[-1].current_stage == "execution_failed"
     assert acks[-1].failure_reason == "REJECTED_LOW_BATTERY"
+
+
+@pytest.mark.asyncio
+async def test_unwired_command_type_fails_cleanly_instead_of_no_op(make_config):
+    acks = []
+    adapter = _StubAdapter(sdk_state="balance_stand")
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("PAUSE"))
+
+    assert acks[-1].current_stage == "execution_failed"
+    assert "PAUSE" in acks[-1].failure_reason
+    assert adapter.set_state_calls == []
+    assert adapter.obstacle_avoidance_calls == []
