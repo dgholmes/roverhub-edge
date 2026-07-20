@@ -17,9 +17,9 @@ class _StubAdapter:
         return item
 
 
-def _snapshot(captured_at="2026-07-20T00:00:00Z"):
+def _snapshot(captured_at="2026-07-20T00:00:00Z", current_state="stand_down"):
     return TelemetrySnapshot(
-        current_state="stand_down", current_speed_ratio=0,
+        current_state=current_state, current_speed_ratio=0,
         obstacle_avoidance_enabled=True, robot_type="quad",
         pos_body=(0.0, 0.0, 0.0), vel_body=(0.0, 0.0, 0.0),
         battery_percent=80.0, captured_at=captured_at,
@@ -72,3 +72,60 @@ async def test_no_frame_emitted_before_first_successful_poll(make_config):
     await reader.poll_once()
 
     assert frames == []
+
+
+@pytest.mark.asyncio
+async def test_on_state_change_fires_when_abstract_state_changes(make_config):
+    state_changes = []
+
+    async def on_frame(frame):
+        pass
+
+    async def on_state_change(sdk_state, abstract_state):
+        state_changes.append((sdk_state, abstract_state))
+
+    adapter = _StubAdapter([
+        _snapshot(current_state="stand_down"),
+        _snapshot(current_state="balance_stand"),
+    ])
+    clock_ticks = iter([
+        datetime(2026, 7, 20, 0, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 20, 0, 0, 1, tzinfo=timezone.utc),
+    ])
+    reader = TelemetryReader(
+        adapter, make_config(), on_frame,
+        clock=lambda: next(clock_ticks),
+        on_state_change=on_state_change,
+    )
+
+    await reader.poll_once()
+    await reader.poll_once()
+
+    assert state_changes == [("stand_down", "PASSIVE"), ("balance_stand", "STAND")]
+
+
+@pytest.mark.asyncio
+async def test_on_state_change_does_not_fire_when_state_is_unchanged(make_config):
+    state_changes = []
+
+    async def on_frame(frame):
+        pass
+
+    async def on_state_change(sdk_state, abstract_state):
+        state_changes.append((sdk_state, abstract_state))
+
+    adapter = _StubAdapter([_snapshot(), _snapshot()])
+    clock_ticks = iter([
+        datetime(2026, 7, 20, 0, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 7, 20, 0, 0, 1, tzinfo=timezone.utc),
+    ])
+    reader = TelemetryReader(
+        adapter, make_config(), on_frame,
+        clock=lambda: next(clock_ticks),
+        on_state_change=on_state_change,
+    )
+
+    await reader.poll_once()
+    await reader.poll_once()
+
+    assert len(state_changes) == 1

@@ -2,6 +2,7 @@ import json
 
 from connection_manager import ConnectionManager
 from shared.schemas.telemetry import TelemetryFrame
+from shared.schemas.bridge_status import HeartbeatPayload, StateUpdate
 
 
 class _FakeMqttClient:
@@ -62,4 +63,32 @@ def test_publish_telemetry_uses_site_robot_topic(make_config):
     manager.publish_telemetry(frame)
     topic, payload, qos = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/telemetry"
+    assert qos == 0
+
+
+def test_publish_state_uses_site_robot_state_topic(make_config):
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    update = StateUpdate(
+        robot_id="robot-x", site_id="site-x", abstract_state="STAND",
+        sdk_state="balance_stand", updated_at="2026-07-20T00:00:00Z",
+    )
+    manager.publish_state(update)
+    topic, payload, qos = fake.published[-1]
+    assert topic == "roverhub/site-x/robot-x/state"
+    assert qos == 1
+    assert json.loads(payload)["abstract_state"] == "STAND"
+
+
+def test_publish_heartbeat_uses_site_robot_heartbeat_topic(make_config):
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    payload_obj = HeartbeatPayload(
+        bridge_id="bridge-x", robot_id="robot-x", site_id="site-x",
+        timestamp="2026-07-20T00:00:00Z", sdk_connected=True, dds_connected=False,
+        cloud_connected=True, battery_pct=80.0, mission_active=False,
+    )
+    manager.publish_heartbeat(payload_obj)
+    topic, payload, qos = fake.published[-1]
+    assert topic == "roverhub/site-x/robot-x/heartbeat"
     assert qos == 0

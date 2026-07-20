@@ -4,6 +4,7 @@ import json
 from typing import Callable, Tuple
 
 from config import BridgeConfig
+from shared.schemas.bridge_status import HeartbeatPayload, StateUpdate
 from shared.schemas.telemetry import TelemetryFrame
 
 MqttClientFactory = Callable[[], object]
@@ -46,6 +47,14 @@ class ConnectionManager:
     def publish_telemetry(self, frame: TelemetryFrame) -> None:
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/telemetry"
         self._client.publish(topic, frame.model_dump_json(), qos=0)
+
+    def publish_state(self, update: StateUpdate) -> None:
+        topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/state"
+        self._client.publish(topic, update.model_dump_json(), qos=1)
+
+    def publish_heartbeat(self, payload: HeartbeatPayload) -> None:
+        topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/heartbeat"
+        self._client.publish(topic, payload.model_dump_json(), qos=0)
 
     @staticmethod
     def _parse_broker_url(url: str) -> Tuple[str, int]:

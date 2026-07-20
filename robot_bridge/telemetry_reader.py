@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
 
 from config import BridgeConfig
 from dobot_adapter import DobotAdapter
 from shared.schemas.telemetry import TelemetryFrame, TelemetrySnapshot
+from state_machine import compute_abstract_state
 
 FrameHandler = Callable[[TelemetryFrame], Awaitable[None]]
+StateChangeHandler = Callable[[str, str], Awaitable[None]]
 Clock = Callable[[], datetime]
 
 
@@ -18,9 +21,11 @@ def _default_clock() -> datetime:
 
 class TelemetryReader:
     """Polls dobot_adapter at config.telemetry_poll_hz, classifies gRPC
-    freshness, and emits TelemetryFrame objects to on_frame. If a poll
-    fails, the last known snapshot is reused and freshness degrades based
-    on elapsed time -- no frame is emitted until the first success."""
+    freshness, emits TelemetryFrame objects to on_frame, and (if
+    on_state_change is provided) derives the abstract state from the same
+    poll and reports it whenever it changes. If a poll fails, the last
+    known snapshot is reused and freshness degrades based on elapsed time
+    -- no frame is emitted until the first success."""
 
     def __init__(
         self,
@@ -28,13 +33,16 @@ class TelemetryReader:
         config: BridgeConfig,
         on_frame: FrameHandler,
         clock: Clock = _default_clock,
+        on_state_change: Optional[StateChangeHandler] = None,
     ):
         self._adapter = adapter
         self._config = config
         self._on_frame = on_frame
         self._clock = clock
+        self._on_state_change = on_state_change
         self._last_snapshot: Optional[TelemetrySnapshot] = None
         self._last_received_at: Optional[float] = None
+        self._last_abstract_state: Optional[str] = None
         self._running = False
 
     async def run_forever(self) -> None:
@@ -71,8 +79,18 @@ class TelemetryReader:
             captured_at=self._last_snapshot.captured_at,
         )
         result = self._on_frame(frame)
-        if asyncio.iscoroutine(result):
+        if inspect.isawaitable(result):
             await result
+
+        if self._on_state_change is not None:
+            abstract_state = compute_abstract_state(
+                sdk_state=self._last_snapshot.current_state,
+                estop_active=False,
+                obstacle_avoidance_enabled=self._last_snapshot.obstacle_avoidance_enabled,
+            )
+            if abstract_state != self._last_abstract_state:
+                self._last_abstract_state = abstract_state
+                await self._on_state_change(self._last_snapshot.current_state, abstract_state)
 
     def _classify_freshness(self, now_ts: float) -> str:
         if self._last_received_at is None:
