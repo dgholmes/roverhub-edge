@@ -61,6 +61,39 @@ async def test_get_telemetry_snapshot_reflects_client_state():
 
 
 @pytest.mark.asyncio
+async def test_get_telemetry_snapshot_defaults_battery_when_client_lacks_it():
+    """Real dobot_quad.RobotClient has no battery_percent attribute (battery
+    is DDS/BMS-only, out of scope this round) -- must degrade to 0.0 rather
+    than raising AttributeError, unlike FakeRobotClient's test convenience."""
+
+    class _RealShapedRobotState:
+        pos_body = (1.0, 2.0, 0.0)
+        vel_body = (0.0, 0.0, 0.0)
+
+    class _RealShapedStateResponse:
+        current_state = "balance_stand"
+        current_speed_ratio = 50
+        obstacle_avoidance_enabled = True
+        robot_state = _RealShapedRobotState()
+
+    class _RealShapedClient:
+        def enable_safety_ready(self):
+            pass
+
+        def is_quad_wheel(self):
+            return False
+
+        def get_state(self):
+            return _RealShapedStateResponse()
+
+    adapter = DobotAdapter(lambda: _RealShapedClient())
+    await adapter.connect()
+    snapshot = await adapter.get_telemetry_snapshot()
+    assert snapshot.battery_percent == 0.0
+    assert snapshot.pos_body == (1.0, 2.0, 0.0)
+
+
+@pytest.mark.asyncio
 async def test_disconnect_closes_client_and_clears_state():
     client = FakeRobotClient()
     adapter = DobotAdapter(lambda: client)

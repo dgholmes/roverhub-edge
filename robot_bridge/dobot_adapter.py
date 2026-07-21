@@ -65,7 +65,13 @@ class DobotAdapter:
             robot_type=self._robot_type,
             pos_body=tuple(state.robot_state.pos_body),
             vel_body=tuple(state.robot_state.vel_body),
-            battery_percent=self._client.battery_percent,
+            # Battery has no gRPC field -- it's only available via the DDS BMS
+            # subscription (e6_bms_state_sub.py), which is out of scope this
+            # round (no DDS integration). FakeRobotClient exposes a
+            # battery_percent attribute as a test-only convenience; the real
+            # dobot_quad.RobotClient has no such attribute, so this reports
+            # 0.0 (unavailable) rather than crashing telemetry/heartbeat.
+            battery_percent=getattr(self._client, "battery_percent", 0.0),
             captured_at=datetime.now(timezone.utc).isoformat(),
         )
 

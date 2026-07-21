@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
 
@@ -9,6 +10,8 @@ from config import BridgeConfig
 from dobot_adapter import DobotAdapter
 from shared.schemas.telemetry import TelemetryFrame, TelemetrySnapshot
 from state_machine import compute_abstract_state
+
+logger = logging.getLogger("robot_bridge.telemetry_reader")
 
 FrameHandler = Callable[[TelemetryFrame], Awaitable[None]]
 StateChangeHandler = Callable[[str, str], Awaitable[None]]
@@ -63,7 +66,7 @@ class TelemetryReader:
             self._last_snapshot = await self._adapter.get_telemetry_snapshot()
             self._last_received_at = now_ts
         except Exception:
-            pass
+            logger.exception("telemetry poll failed; reusing last known snapshot if any")
 
         if self._last_snapshot is None:
             return

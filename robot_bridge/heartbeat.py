@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
 from config import BridgeConfig
 from dobot_adapter import DobotAdapter
 from shared.schemas.bridge_status import HeartbeatPayload
+
+logger = logging.getLogger("robot_bridge.heartbeat")
 
 HeartbeatHandler = Callable[[HeartbeatPayload], Awaitable[None]]
 
@@ -39,6 +42,7 @@ class HeartbeatSender:
             sdk_connected = True
             battery_pct = snapshot.battery_percent
         except Exception:
+            logger.exception("heartbeat: adapter call failed, reporting sdk_connected=False")
             sdk_connected = False
             battery_pct = 0.0
 
