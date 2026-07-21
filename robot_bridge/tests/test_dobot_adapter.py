@@ -61,6 +61,55 @@ async def test_get_telemetry_snapshot_reflects_client_state():
 
 
 @pytest.mark.asyncio
+async def test_get_sdk_state_lowercases_real_sdk_uppercase_response():
+    """The real dobot_quad SDK's get_current_state_name() returns uppercase
+    (e.g. "WALK"), but every downstream comparison (state_machine.py,
+    command_sender.py's RESET_ESTOP check) expects lowercase."""
+
+    class _UppercaseStateClient:
+        def enable_safety_ready(self):
+            pass
+
+        def is_quad_wheel(self):
+            return False
+
+        def get_current_state_name(self):
+            return "WALK"
+
+    adapter = DobotAdapter(lambda: _UppercaseStateClient())
+    await adapter.connect()
+    assert await adapter.get_sdk_state() == "walk"
+
+
+@pytest.mark.asyncio
+async def test_get_telemetry_snapshot_lowercases_real_sdk_uppercase_current_state():
+    class _RealShapedRobotState:
+        pos_body = (0.0, 0.0, 0.0)
+        vel_body = (0.0, 0.0, 0.0)
+
+    class _UppercaseStateResponse:
+        current_state = "PASSIVE"
+        current_speed_ratio = 0
+        obstacle_avoidance_enabled = True
+        robot_state = _RealShapedRobotState()
+
+    class _UppercaseStateClient:
+        def enable_safety_ready(self):
+            pass
+
+        def is_quad_wheel(self):
+            return False
+
+        def get_state(self):
+            return _UppercaseStateResponse()
+
+    adapter = DobotAdapter(lambda: _UppercaseStateClient())
+    await adapter.connect()
+    snapshot = await adapter.get_telemetry_snapshot()
+    assert snapshot.current_state == "passive"
+
+
+@pytest.mark.asyncio
 async def test_get_telemetry_snapshot_defaults_battery_when_client_lacks_it():
     """Real dobot_quad.RobotClient has no battery_percent attribute (battery
     is DDS/BMS-only, out of scope this round) -- must degrade to 0.0 rather

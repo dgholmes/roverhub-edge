@@ -41,7 +41,7 @@ class DobotAdapter:
 
     async def get_sdk_state(self) -> str:
         self._require_connected()
-        return self._client.get_current_state_name()
+        return self._client.get_current_state_name().lower()
 
     async def get_robot_config(self) -> str:
         self._require_connected()
@@ -59,7 +59,13 @@ class DobotAdapter:
         self._require_connected()
         state = self._client.get_state()
         return TelemetrySnapshot(
-            current_state=state.current_state,
+            # Normalize case here, at the sole SDK boundary -- the real SDK
+            # returns state names uppercase (e.g. "WALK"), but every
+            # downstream comparison (state_machine.py, command_sender.py's
+            # RESET_ESTOP precondition) uses lowercase names matching the
+            # docs and the fake test client. Found by running against a
+            # physical robot for the first time.
+            current_state=state.current_state.lower(),
             current_speed_ratio=state.current_speed_ratio,
             obstacle_avoidance_enabled=state.obstacle_avoidance_enabled,
             robot_type=self._robot_type,
