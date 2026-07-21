@@ -102,4 +102,7 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
 
 
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+
+    load_dotenv()  # loads .env in this directory, if present; real env vars still win
     asyncio.run(run())
