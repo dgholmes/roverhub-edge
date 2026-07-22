@@ -167,7 +167,20 @@ async def test_set_speed_ratio_calls_client():
     adapter = DobotAdapter(lambda: client)
     await adapter.connect()
     await adapter.set_speed_ratio(75)
-    assert client.speed_ratio == 75
+    assert client.get_state().current_speed_ratio == 75
+
+
+@pytest.mark.asyncio
+async def test_set_speed_ratio_reflected_in_telemetry_snapshot():
+    """set_speed_ratio must be observable end-to-end via telemetry, not just
+    on the client -- get_telemetry_snapshot() reads FakeRobotClient.get_state(),
+    which reads the same _speed_ratio attribute set_speed_ratio writes to."""
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.set_speed_ratio(75)
+    snapshot = await adapter.get_telemetry_snapshot()
+    assert snapshot.current_speed_ratio == 75
 
 
 @pytest.mark.asyncio
@@ -176,7 +189,12 @@ async def test_send_velocity_sequence_calls_client():
     adapter = DobotAdapter(lambda: client)
     await adapter.connect()
     await adapter.send_velocity_sequence([(0.5, 0.0, 0.0, 0.25)], gait="walk", speed_ratio=60)
-    assert client.last_velocity_sequence == {"steps": [(0.5, 0.0, 0.0, 0.25)], "gait": "walk", "speed_ratio": 60}
+    assert client.last_velocity_sequence == {
+        "steps": [(0.5, 0.0, 0.0, 0.25)],
+        "gait": "walk",
+        "speed_ratio": 60,
+        "stand_down_after": False,
+    }
 
 
 @pytest.mark.asyncio

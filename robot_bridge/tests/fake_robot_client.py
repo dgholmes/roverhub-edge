@@ -54,7 +54,6 @@ class FakeRobotClient:
         self._pos: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._vel: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self.safety_ready_called = False
-        self.speed_ratio = 50
         self.last_velocity_sequence = None
         self.last_line_walk = None
         self.last_rotate = None
@@ -87,11 +86,16 @@ class FakeRobotClient:
         return FakeExecResponse(success=True, current_state=self._state)
 
     def set_speed_ratio(self, ratio: int):
-        self.speed_ratio = ratio
+        self._speed_ratio = ratio
         return FakeExecResponse(success=True, current_state=self._state)
 
     def velocity_sequence(self, steps, gait="walk", speed_ratio=None, stand_down_after=True):
-        self.last_velocity_sequence = {"steps": steps, "gait": gait, "speed_ratio": speed_ratio}
+        self.last_velocity_sequence = {
+            "steps": steps,
+            "gait": gait,
+            "speed_ratio": speed_ratio,
+            "stand_down_after": stand_down_after,
+        }
         return FakeExecResponse(success=True, current_state=self._state)
 
     def line_walk(self, direction, distance=3.0):
