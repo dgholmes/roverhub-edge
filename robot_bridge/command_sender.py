@@ -15,9 +15,10 @@ RECOVERY_TARGET_STATE = "balance_stand"
 
 
 class CommandSender:
-    """Executes the five in-scope command types against dobot_adapter,
-    gated by safety_manager, emitting ACK stage updates via on_ack. Only
-    one command executes at a time (docs/04-edge-bridge.md SS3.5 -- this
+    """Executes commands against dobot_adapter, gated by safety_manager,
+    emitting ACK stage updates via on_ack. Covers the full wired command
+    surface -- see shared.schemas.commands.WIRED_COMMAND_TYPES. Only one
+    command executes at a time (docs/04-edge-bridge.md SS3.5 -- this
     build has no queueing since nothing yet issues overlapping commands)."""
 
     def __init__(
