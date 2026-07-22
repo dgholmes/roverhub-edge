@@ -18,15 +18,72 @@ def real_client_factory(config: BridgeConfig):
     return RobotClient(config.robot_ip)
 
 
-class DobotAdapter:
-    """Sole SDK import boundary at runtime. client_factory constructs the
-    underlying client (real in production via real_client_factory, fake
-    in tests) so no other module needs to know which one is in use."""
+def real_dds_middleware_factory():
+    """Constructs the real dds_middleware_python.PyDDSMiddleware. Only
+    reachable in production -- dds_middleware_python cannot be installed on
+    this dev machine (Linux/Jetson-specific .deb package), so this path has
+    never been exercised, only the fake in tests/fake_dds_middleware.py."""
+    import dds_middleware_python as dds
 
-    def __init__(self, client_factory: ClientFactory):
+    return dds.PyDDSMiddleware(0)
+
+
+class _RealDdsMessages:
+    """Lazily imports dds_middleware_python's message constructors -- only
+    reachable in production."""
+
+    @staticmethod
+    def led_control():
+        import dds_middleware_python as dds
+        return dds.LEDControl()
+
+    @staticmethod
+    def leds_cmd():
+        import dds_middleware_python as dds
+        return dds.LedsCmd()
+
+    @staticmethod
+    def header():
+        import dds_middleware_python as dds
+        return dds.Header()
+
+    @staticmethod
+    def time():
+        import dds_middleware_python as dds
+        return dds.Time()
+
+    @staticmethod
+    def voice_cmd():
+        import dds_middleware_python as dds
+        return dds.VoiceCmd()
+
+    @staticmethod
+    def voice_priority_normal():
+        """The real dds.VoicePriority.kNormal enum value (e7_voice_pub.py's
+        usage for ordinary, non-urgent audio) -- exposed as its own factory
+        method since the fake has no equivalent enum to construct against."""
+        import dds_middleware_python as dds
+        return dds.VoicePriority.kNormal
+
+
+class DobotAdapter:
+    """Sole SDK import boundary at runtime -- covers both the high-level
+    gRPC client and the low-level DDS middleware (LED/voice)."""
+
+    def __init__(
+        self,
+        client_factory: ClientFactory,
+        dds_middleware_factory=real_dds_middleware_factory,
+        dds_messages=_RealDdsMessages,
+    ):
         self._client_factory = client_factory
+        self._dds_middleware_factory = dds_middleware_factory
+        self._dds_messages = dds_messages
         self._client = None
         self._robot_type: Optional[str] = None
+        self._dds_middleware = None
+        self._led_writer_created = False
+        self._voice_writer_created = False
 
     async def connect(self) -> None:
         self._client = self._client_factory()
@@ -109,6 +166,59 @@ class DobotAdapter:
             return [m.motion_id for m in motions]
         return list(getattr(response, "motion_ids", []))
 
+    async def set_led(self, pattern: dict) -> None:
+        self._require_connected()
+        middleware = self._get_dds_middleware()
+        if not self._led_writer_created:
+            middleware.createLedsCmdWriter("rt/leds/cmd", {
+                "reliability": "reliable", "history_kind": "keep_last",
+                "history_depth": 1, "durability": "volatile",
+            })
+            self._led_writer_created = True
+
+        led = self._dds_messages.led_control()
+        led.name(pattern["name"])
+        led.mode(0)
+        led.brightness(pattern.get("brightness", 255))
+        led.r(pattern.get("r", 0))
+        led.g(pattern.get("g", 0))
+        led.b(pattern.get("b", 0))
+        led.priority(pattern.get("priority", 0))
+        cmd = self._dds_messages.leds_cmd()
+        cmd.leds([led])
+        middleware.publishLedsCmd(cmd)
+
+    async def speak(self, file_path: str) -> None:
+        self._require_connected()
+        middleware = self._get_dds_middleware()
+        if not self._voice_writer_created:
+            middleware.createVoiceCmdWriter("rt/voice/cmd", {
+                "reliability": "reliable", "history_kind": "keep_last",
+                "history_depth": 5, "durability": "volatile",
+            })
+            self._voice_writer_created = True
+
+        header = self._dds_messages.header()
+        stamp = self._dds_messages.time()
+        now = datetime.now(timezone.utc).timestamp()
+        stamp.sec(int(now))
+        stamp.nanosec(int((now - int(now)) * 1e9))
+        header.stamp(stamp)
+        header.frame_id("voice_cmd")
+
+        # Matches e7_voice_pub.py's file-mode VoiceCmd: priority/task_id/
+        # type/data/flag are all required fields on the real message, not
+        # just header+path.
+        voice = self._dds_messages.voice_cmd()
+        voice.header(header)
+        voice.priority(self._dds_messages.voice_priority_normal())
+        voice.task_id("roverhub")
+        voice.type("file")
+        voice.path(file_path)
+        voice.data([])
+        voice.flag(False)
+        middleware.publishVoiceCmd(voice)
+
     async def get_telemetry_snapshot(self) -> TelemetrySnapshot:
         self._require_connected()
         state = self._client.get_state()
@@ -138,3 +248,8 @@ class DobotAdapter:
     def _require_connected(self) -> None:
         if self._client is None:
             raise RuntimeError("DobotAdapter.connect() must be called first")
+
+    def _get_dds_middleware(self):
+        if self._dds_middleware is None:
+            self._dds_middleware = self._dds_middleware_factory()
+        return self._dds_middleware

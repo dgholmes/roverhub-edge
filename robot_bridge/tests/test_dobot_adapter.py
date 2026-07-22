@@ -277,3 +277,78 @@ async def test_get_motions_returns_motion_id_list():
     motions = await adapter.get_motions()
     assert "walk" in motions
     assert isinstance(motions, list)
+
+
+class _FakeDdsMessages:
+    @staticmethod
+    def led_control():
+        from fake_dds_middleware import FakeLEDControl
+        return FakeLEDControl()
+
+    @staticmethod
+    def leds_cmd():
+        from fake_dds_middleware import FakeLedsCmd
+        return FakeLedsCmd()
+
+    @staticmethod
+    def header():
+        from fake_dds_middleware import FakeHeader
+        return FakeHeader()
+
+    @staticmethod
+    def time():
+        from fake_dds_middleware import FakeTime
+        return FakeTime()
+
+    @staticmethod
+    def voice_cmd():
+        from fake_dds_middleware import FakeVoiceCmd
+        return FakeVoiceCmd()
+
+    @staticmethod
+    def voice_priority_normal():
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_set_led_creates_writer_once_and_publishes():
+    from fake_dds_middleware import FakePyDDSMiddleware
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(
+        lambda: FakeRobotClient(),
+        dds_middleware_factory=lambda: middleware,
+        dds_messages=_FakeDdsMessages,
+    )
+    await adapter.connect()
+
+    await adapter.set_led({"name": "leg_light1", "r": 255, "g": 0, "b": 0, "brightness": 255, "priority": 0})
+    await adapter.set_led({"name": "leg_light2", "r": 0, "g": 255, "b": 0, "brightness": 255, "priority": 0})
+
+    assert "rt/leds/cmd" in middleware.created_writers
+    assert len(middleware.published["rt/leds/cmd"]) == 2
+    first_cmd = middleware.published["rt/leds/cmd"][0]
+    assert first_cmd.leds()[0].name() == "leg_light1"
+    assert first_cmd.leds()[0].r() == 255
+
+
+@pytest.mark.asyncio
+async def test_speak_publishes_file_path():
+    from fake_dds_middleware import FakePyDDSMiddleware
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(
+        lambda: FakeRobotClient(),
+        dds_middleware_factory=lambda: middleware,
+        dds_messages=_FakeDdsMessages,
+    )
+    await adapter.connect()
+
+    await adapter.speak("/tmp/clip.wav")
+
+    assert "rt/voice/cmd" in middleware.created_writers
+    published = middleware.published["rt/voice/cmd"][-1]
+    assert published.path() == "/tmp/clip.wav"
+    assert published.type() == "file"
+    assert published.data() == []
+    assert published.flag() is False
