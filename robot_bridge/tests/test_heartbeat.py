@@ -23,6 +23,11 @@ class _StubAdapter:
             battery_percent=self._battery_percent, captured_at="2026-07-20T00:00:00Z",
         )
 
+    async def get_motions(self):
+        if self._raise_on_state:
+            raise RuntimeError("not connected")
+        return ["walk", "dance", "wave"]
+
 
 @pytest.mark.asyncio
 async def test_send_once_reports_connected_and_battery(make_config):
@@ -46,3 +51,23 @@ async def test_send_once_reports_disconnected_when_adapter_raises(make_config):
 
     assert payloads[0].sdk_connected is False
     assert payloads[0].battery_pct == 0.0
+
+
+@pytest.mark.asyncio
+async def test_send_once_includes_available_motions(make_config):
+    payloads = []
+    sender = HeartbeatSender(_StubAdapter(), make_config(), payloads.append)
+
+    await sender.send_once()
+
+    assert payloads[0].available_motions == ["walk", "dance", "wave"]
+
+
+@pytest.mark.asyncio
+async def test_send_once_reports_empty_motions_when_adapter_raises(make_config):
+    payloads = []
+    sender = HeartbeatSender(_StubAdapter(raise_on_state=True), make_config(), payloads.append)
+
+    await sender.send_once()
+
+    assert payloads[0].available_motions == []

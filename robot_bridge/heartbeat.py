@@ -46,6 +46,11 @@ class HeartbeatSender:
             sdk_connected = False
             battery_pct = 0.0
 
+        try:
+            available_motions = await self._adapter.get_motions()
+        except Exception:
+            available_motions = []
+
         payload = HeartbeatPayload(
             bridge_id=self._config.bridge_id,
             robot_id=self._config.robot_id,
@@ -56,6 +61,7 @@ class HeartbeatSender:
             cloud_connected=True,
             battery_pct=battery_pct,
             mission_active=False,
+            available_motions=available_motions,
         )
         result = self._on_heartbeat(payload)
         if inspect.isawaitable(result):
