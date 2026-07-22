@@ -60,8 +60,16 @@ class ConnectionManager:
         self._client.publish(topic, frame.model_dump_json(), qos=0)
 
     def publish_state(self, update: StateUpdate) -> None:
+        # Retained for the same reason as publish_registration above:
+        # this is only published on change (telemetry_reader.py's
+        # compute_abstract_state comparison), so a frontend that connects
+        # or reloads while the robot's state hasn't changed recently would
+        # otherwise never learn the real current state and would sit on
+        # its own hardcoded 'STAND' default indefinitely -- live-reported
+        # as "UI shows Standing even though the robot is at stand_down/
+        # passive."
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/state"
-        self._client.publish(topic, update.model_dump_json(), qos=1)
+        self._client.publish(topic, update.model_dump_json(), qos=1, retain=True)
 
     def publish_heartbeat(self, payload: HeartbeatPayload) -> None:
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/heartbeat"

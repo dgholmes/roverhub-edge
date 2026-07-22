@@ -102,6 +102,24 @@ def test_publish_state_uses_site_robot_state_topic(make_config):
     assert json.loads(payload)["abstract_state"] == "STAND"
 
 
+def test_publish_state_is_retained(make_config):
+    """Regression test: a live symptom (frontend showing 'Standing' even
+    though the robot was actually at stand_down/passive) traced to state
+    only being published on change, non-retained -- a frontend that
+    connects/reloads while the robot's state hasn't changed recently (or
+    ever, while sitting still) would otherwise never learn the real
+    current state and would sit on its own hardcoded default forever."""
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    update = StateUpdate(
+        robot_id="robot-x", site_id="site-x", abstract_state="PASSIVE",
+        sdk_state="stand_down", updated_at="2026-07-20T00:00:00Z",
+    )
+    manager.publish_state(update)
+    _, _, _, retain = fake.published[-1]
+    assert retain is True
+
+
 def test_publish_heartbeat_uses_site_robot_heartbeat_topic(make_config):
     fake = _FakeMqttClient()
     manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)

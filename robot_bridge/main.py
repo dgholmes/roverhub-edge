@@ -34,6 +34,22 @@ class _LatestBattery:
         return self.percent
 
 
+class _LatestState:
+    """Shared holder so on_heartbeat can re-publish the current state on
+    every tick without waiting for another actual transition -- see
+    connection_manager.py's publish_state docstring for why this self-heal
+    matters (a frontend connecting/reloading while state hasn't changed
+    recently would otherwise see a stale default forever)."""
+
+    def __init__(self) -> None:
+        self.sdk_state: str | None = None
+        self.abstract_state: str | None = None
+
+    def update(self, sdk_state: str, abstract_state: str) -> None:
+        self.sdk_state = sdk_state
+        self.abstract_state = abstract_state
+
+
 async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_client_factory=real_mqtt_client_factory) -> None:
     config = config or BridgeConfig.from_env()
     if client_factory is None:
@@ -43,6 +59,7 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
     connection = ConnectionManager(config, mqtt_client_factory)
     safety = SafetyManager(config)
     latest_battery = _LatestBattery()
+    latest_state = _LatestState()
 
     await adapter.connect()
     robot_type = await adapter.get_robot_config()
@@ -54,6 +71,7 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
         latest_battery.update(frame.battery_percent)
 
     async def on_state_change(sdk_state, abstract_state):
+        latest_state.update(sdk_state, abstract_state)
         connection.publish_state(StateUpdate(
             robot_id=config.robot_id, site_id=config.site_id,
             abstract_state=abstract_state, sdk_state=sdk_state,
@@ -68,6 +86,17 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
         # broker restart (this project's mosquitto.conf sets persistence
         # false, so a retained message alone wouldn't survive that case).
         connection.publish_registration(robot_type)
+        # Same self-heal for state -- re-publish the last known state on
+        # every heartbeat tick, not just on an actual transition. Guarded
+        # on latest_state.abstract_state being set at all, since the very
+        # first heartbeat tick could in principle fire before the first
+        # telemetry poll has ever computed a state.
+        if latest_state.abstract_state is not None:
+            connection.publish_state(StateUpdate(
+                robot_id=config.robot_id, site_id=config.site_id,
+                abstract_state=latest_state.abstract_state, sdk_state=latest_state.sdk_state,
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            ))
         connection.publish_heartbeat(payload)
 
     sender = CommandSender(adapter, safety, on_ack=connection.publish_ack, battery_percent_provider=latest_battery.read)
