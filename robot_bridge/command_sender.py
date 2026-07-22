@@ -43,10 +43,22 @@ class CommandSender:
             sdk_state = None
             sdk_connected = False
 
+        try:
+            robot_type = await self._adapter.get_robot_config()
+        except Exception:
+            robot_type = None
+
+        command_params = command.params or {}
+        # SET_SPEED_RATIO carries its value under "ratio"; VELOCITY_SEQUENCE
+        # under "speed_ratio". Check both so safety clamping applies to either.
+        requested_speed_ratio = command_params.get("speed_ratio", command_params.get("ratio"))
+
         check = self._safety.check(
             command_type=command.type,
             sdk_connected=sdk_connected,
             battery_percent=self._battery_percent_provider(),
+            robot_type=robot_type,
+            speed_ratio=requested_speed_ratio,
         )
         if not check.approved:
             command.failure_reason = check.rejection_code
@@ -57,7 +69,7 @@ class CommandSender:
         self._advance(command, "local_safety_check")
 
         try:
-            await self._execute(command, sdk_state)
+            await self._execute(command, sdk_state, check.clamped_speed_ratio)
         except Exception as exc:
             command.failure_reason = str(exc)
             self._advance(command, "execution_failed")
@@ -68,7 +80,8 @@ class CommandSender:
         self._advance(command, "execution_started")
         self._advance(command, "execution_completed")
 
-    async def _execute(self, command: Command, sdk_state: Optional[str]) -> None:
+    async def _execute(self, command: Command, sdk_state: Optional[str], clamped_speed_ratio: Optional[int]) -> None:
+        params = command.params or {}
         if command.type == "ESTOP":
             self._safety.trigger_estop()
             await self._adapter.set_state(ESTOP_TARGET_STATE)
@@ -78,10 +91,41 @@ class CommandSender:
             await self._adapter.set_state(RECOVERY_TARGET_STATE)
             self._safety.clear_estop()
         elif command.type == "SET_OBSTACLE_AVOIDANCE":
-            enabled = bool((command.params or {}).get("enabled", True))
+            enabled = bool(params.get("enabled", True))
             await self._adapter.enable_obstacle_avoidance(enabled)
         elif command.type in ("TAKE_CONTROL", "RELEASE_CONTROL"):
             pass  # backend-only concept -- no SDK call
+        elif command.type == "SET_STATE":
+            await self._adapter.set_state(params["state"])
+        elif command.type == "CHANGE_MODE":
+            await self._adapter.change_mode()
+        elif command.type == "SET_SPEED_RATIO":
+            await self._adapter.set_speed_ratio(clamped_speed_ratio if clamped_speed_ratio is not None else params["ratio"])
+        elif command.type == "VELOCITY_SEQUENCE":
+            speed_ratio = clamped_speed_ratio if clamped_speed_ratio is not None else params.get("speed_ratio")
+            await self._adapter.send_velocity_sequence(params["steps"], params.get("gait", "walk"), speed_ratio)
+        elif command.type == "LINE_WALK":
+            await self._adapter.line_walk(params["direction"], params.get("distance", 1.0))
+        elif command.type == "ROTATE":
+            await self._adapter.rotate(params["direction"], params.get("angle", 90.0))
+        elif command.type == "CIRCLE":
+            await self._adapter.circle(params.get("direction", "left"), params.get("turns", 1))
+        elif command.type == "BALANCE_AXIS":
+            await self._adapter.balance_axis(params["axis"], params["value"], params.get("duration", 2.0), params.get("mode", "dynamic"))
+        elif command.type == "BALANCE_NEUTRAL":
+            await self._adapter.balance_neutral()
+        elif command.type == "BALANCE_SEQUENCE":
+            await self._adapter.balance_sequence(params["steps"])
+        elif command.type == "DYNAMIC_POSE":
+            await self._adapter.dynamic_pose(
+                params.get("duration", 2.0), params.get("roll_deg", 0.0),
+                params.get("pitch_deg", 0.0), params.get("yaw_deg", 0.0), params.get("height_m", 0.0),
+            )
+        elif command.type == "STATIC_POSE":
+            await self._adapter.static_pose(
+                params.get("duration", 2.0), params.get("roll_deg", 0.0),
+                params.get("pitch_deg", 0.0), params.get("yaw_deg", 0.0), params.get("height_m", 0.0),
+            )
         else:
             raise RuntimeError(f"unsupported command type for this build: {command.type}")
 
