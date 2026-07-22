@@ -19,7 +19,7 @@ def test_middleware_records_published_leds_cmd():
     led.priority(0)
     cmd = FakeLedsCmd()
     cmd.leds([led])
-    middleware.publish("rt/leds/cmd", cmd)
+    middleware.publishLedsCmd(cmd)
     assert middleware.published["rt/leds/cmd"][-1] is cmd
     assert middleware.published["rt/leds/cmd"][-1].leds()[0].name() == "leg_light1"
 
@@ -29,6 +29,11 @@ def test_middleware_records_published_voice_cmd():
     middleware.createVoiceCmdWriter("rt/voice/cmd", {})
     voice = FakeVoiceCmd()
     voice.header(FakeHeader())
-    voice.file_path("/tmp/clip.wav")
-    middleware.publish("rt/voice/cmd", voice)
-    assert middleware.published["rt/voice/cmd"][-1].file_path() == "/tmp/clip.wav"
+    voice.priority(0)
+    voice.task_id("roverhub")
+    voice.type("file")
+    voice.path("/tmp/clip.wav")
+    voice.data([])
+    voice.flag(False)
+    middleware.publishVoiceCmd(voice)
+    assert middleware.published["rt/voice/cmd"][-1].path() == "/tmp/clip.wav"

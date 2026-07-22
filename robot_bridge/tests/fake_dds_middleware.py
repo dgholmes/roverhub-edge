@@ -87,27 +87,54 @@ class FakeHeader:
 
 
 class FakeVoiceCmd:
+    """Matches e7_voice_pub.py's VoiceCmd usage: header, priority (a
+    dds.VoicePriority enum value in the real SDK, e.g. kNormal), task_id,
+    type ("file"/"streaming"), path, data (list), flag (bool)."""
+
     def __init__(self):
-        self._header = None
-        self._file_path = None
+        self._values = {
+            "header": None, "priority": None, "task_id": None,
+            "type": None, "path": None, "data": [], "flag": False,
+        }
+
+    def _accessor(self, key, *args):
+        if args:
+            self._values[key] = args[0]
+            return None
+        return self._values[key]
 
     def header(self, *args):
-        if args:
-            self._header = args[0]
-            return None
-        return self._header
+        return self._accessor("header", *args)
 
-    def file_path(self, *args):
-        if args:
-            self._file_path = args[0]
-            return None
-        return self._file_path
+    def priority(self, *args):
+        return self._accessor("priority", *args)
+
+    def task_id(self, *args):
+        return self._accessor("task_id", *args)
+
+    def type(self, *args):
+        return self._accessor("type", *args)
+
+    def path(self, *args):
+        return self._accessor("path", *args)
+
+    def data(self, *args):
+        return self._accessor("data", *args)
+
+    def flag(self, *args):
+        return self._accessor("flag", *args)
 
 
 class FakePyDDSMiddleware:
     """Fake dds_middleware_python.PyDDSMiddleware -- see this file's module
     docstring in the task brief for why this fake carries more uncertainty
-    than fake_robot_client.py."""
+    than fake_robot_client.py. Real API has no generic publish(topic, msg):
+    e3_led_control_pub.py/e7_voice_pub.py call dedicated
+    publishLedsCmd(cmd)/publishVoiceCmd(cmd) with no topic argument (the
+    topic was already bound at createXCmdWriter time) -- this fake mirrors
+    that exactly, hardcoding the one topic each writer type is created on
+    since this codebase only ever creates one LED writer and one voice
+    writer."""
 
     def __init__(self, domain_id: int):
         self.domain_id = domain_id
@@ -120,5 +147,8 @@ class FakePyDDSMiddleware:
     def createVoiceCmdWriter(self, topic: str, qos_config: dict):
         self.created_writers[topic] = qos_config
 
-    def publish(self, topic: str, message) -> None:
-        self.published[topic].append(message)
+    def publishLedsCmd(self, message) -> None:
+        self.published["rt/leds/cmd"].append(message)
+
+    def publishVoiceCmd(self, message) -> None:
+        self.published["rt/voice/cmd"].append(message)
