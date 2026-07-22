@@ -37,6 +37,13 @@ class FakeExecResponse:
     message: str = ""
 
 
+@dataclass
+class FakeMotionsResponse:
+    success: bool
+    motion_ids: list
+    message: str = ""
+
+
 class FakeRobotClient:
     """Test-only stand-in for dobot_quad.RobotClient's method surface used by
     dobot_adapter.py. Battery has no real SDK/DDS source this round (no BMS/
@@ -58,6 +65,9 @@ class FakeRobotClient:
         self.last_line_walk = None
         self.last_rotate = None
         self.last_circle = None
+        self.last_balance_call = None
+        self.last_balance_sequence = None
+        self.last_pose_call = None
 
     def enable_safety_ready(self) -> None:
         self.safety_ready_called = True
@@ -109,6 +119,42 @@ class FakeRobotClient:
     def circle(self, direction="left", turns=1):
         self.last_circle = {"direction": direction, "turns": turns}
         return FakeExecResponse(success=True, current_state=self._state)
+
+    def balance_pitch(self, value, duration=2.0, mode="dynamic"):
+        self.last_balance_call = ("pitch", value, duration, mode)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def balance_yaw(self, value, duration=2.0, mode="dynamic"):
+        self.last_balance_call = ("yaw", value, duration, mode)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def balance_roll(self, value, duration=2.0, mode="dynamic"):
+        self.last_balance_call = ("roll", value, duration, mode)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def balance_height(self, value, duration=2.0, mode="dynamic"):
+        self.last_balance_call = ("height", value, duration, mode)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def balance_neutral(self, duration=0.5):
+        self.last_balance_call = ("neutral", 0.0, duration, "dynamic")
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def balance_sequence(self, motions):
+        self.last_balance_sequence = motions
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def dynamic_pose(self, duration=2.0, roll_deg=0.0, pitch_deg=0.0, yaw_deg=0.0, height_m=0.0):
+        self.last_pose_call = ("dynamic", duration, roll_deg, pitch_deg, yaw_deg, height_m)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def static_pose(self, duration=2.0, roll_deg=0.0, pitch_deg=0.0, yaw_deg=0.0, height_m=0.0):
+        self.last_pose_call = ("static", duration, roll_deg, pitch_deg, yaw_deg, height_m)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def get_motions(self):
+        names = ["passive", "ready", "stand_down", "balance_stand", "walk", "dance", "wave", "jump"]
+        return FakeMotionsResponse(success=True, motion_ids=names)
 
     def get_state(self) -> FakeStateResponse:
         return FakeStateResponse(

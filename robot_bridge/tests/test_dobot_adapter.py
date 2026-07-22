@@ -222,3 +222,58 @@ async def test_circle_calls_client():
     await adapter.connect()
     await adapter.circle("right", 2)
     assert client.last_circle == {"direction": "right", "turns": 2}
+
+
+@pytest.mark.asyncio
+async def test_balance_axis_calls_correct_client_method():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.balance_axis("yaw", 15.0, 0.5, "dynamic")
+    assert client.last_balance_call == ("yaw", 15.0, 0.5, "dynamic")
+
+
+@pytest.mark.asyncio
+async def test_balance_neutral_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.balance_neutral()
+    assert client.last_balance_call[0] == "neutral"
+
+
+@pytest.mark.asyncio
+async def test_balance_sequence_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    steps = [("balance_pitch", 15.0, 0.5, "dynamic")]
+    await adapter.balance_sequence(steps)
+    assert client.last_balance_sequence == steps
+
+
+@pytest.mark.asyncio
+async def test_dynamic_pose_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.dynamic_pose(2.0, roll_deg=10.0, pitch_deg=5.0, yaw_deg=0.0, height_m=-0.05)
+    assert client.last_pose_call == ("dynamic", 2.0, 10.0, 5.0, 0.0, -0.05)
+
+
+@pytest.mark.asyncio
+async def test_static_pose_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.static_pose(3.0, roll_deg=-10.0, pitch_deg=0.0, yaw_deg=5.0, height_m=0.0)
+    assert client.last_pose_call == ("static", 3.0, -10.0, 0.0, 5.0, 0.0)
+
+
+@pytest.mark.asyncio
+async def test_get_motions_returns_motion_id_list():
+    adapter = DobotAdapter(lambda: FakeRobotClient())
+    await adapter.connect()
+    motions = await adapter.get_motions()
+    assert "walk" in motions
+    assert isinstance(motions, list)

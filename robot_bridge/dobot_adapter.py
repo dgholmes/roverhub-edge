@@ -80,6 +80,35 @@ class DobotAdapter:
         self._require_connected()
         self._client.circle(direction, turns)
 
+    async def balance_axis(self, axis: str, value: float, duration: float, mode: str) -> None:
+        self._require_connected()
+        method = getattr(self._client, f"balance_{axis}")
+        method(value, duration=duration, mode=mode)
+
+    async def balance_neutral(self) -> None:
+        self._require_connected()
+        self._client.balance_neutral()
+
+    async def balance_sequence(self, steps) -> None:
+        self._require_connected()
+        self._client.balance_sequence(steps)
+
+    async def dynamic_pose(self, duration: float, roll_deg: float, pitch_deg: float, yaw_deg: float, height_m: float) -> None:
+        self._require_connected()
+        self._client.dynamic_pose(duration, roll_deg=roll_deg, pitch_deg=pitch_deg, yaw_deg=yaw_deg, height_m=height_m)
+
+    async def static_pose(self, duration: float, roll_deg: float, pitch_deg: float, yaw_deg: float, height_m: float) -> None:
+        self._require_connected()
+        self._client.static_pose(duration, roll_deg=roll_deg, pitch_deg=pitch_deg, yaw_deg=yaw_deg, height_m=height_m)
+
+    async def get_motions(self) -> list:
+        self._require_connected()
+        response = self._client.get_motions()
+        motions = getattr(response, "motions", None)
+        if motions is not None:
+            return [m.motion_id for m in motions]
+        return list(getattr(response, "motion_ids", []))
+
     async def get_telemetry_snapshot(self) -> TelemetrySnapshot:
         self._require_connected()
         state = self._client.get_state()
