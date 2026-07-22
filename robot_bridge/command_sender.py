@@ -126,6 +126,10 @@ class CommandSender:
                 params.get("duration", 2.0), params.get("roll_deg", 0.0),
                 params.get("pitch_deg", 0.0), params.get("yaw_deg", 0.0), params.get("height_m", 0.0),
             )
+        elif command.type == "LED_SIGNAL":
+            await self._adapter.set_led(params)
+        elif command.type == "SPEAK":
+            await self._adapter.speak(params["file_path"])
         else:
             raise RuntimeError(f"unsupported command type for this build: {command.type}")
 

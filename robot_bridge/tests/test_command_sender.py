@@ -23,6 +23,8 @@ class _StubAdapter:
         self.balance_sequence_calls = []
         self.dynamic_pose_calls = []
         self.static_pose_calls = []
+        self.set_led_calls = []
+        self.speak_calls = []
 
     async def get_sdk_state(self):
         if self._raise_on_get_state:
@@ -71,6 +73,12 @@ class _StubAdapter:
 
     async def static_pose(self, duration, roll_deg, pitch_deg, yaw_deg, height_m):
         self.static_pose_calls.append((duration, roll_deg, pitch_deg, yaw_deg, height_m))
+
+    async def set_led(self, pattern):
+        self.set_led_calls.append(pattern)
+
+    async def speak(self, file_path):
+        self.speak_calls.append(file_path)
 
 
 def _command(command_type, params=None):
@@ -357,3 +365,31 @@ async def test_static_pose_command_calls_adapter(make_config):
 
     assert acks[-1].current_stage == "execution_completed"
     assert adapter.static_pose_calls == [(3.0, 0.0, 0.0, 5.0, 0.0)]
+
+
+@pytest.mark.asyncio
+async def test_led_signal_command_calls_adapter(make_config):
+    acks = []
+    adapter = _StubAdapter()
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("LED_SIGNAL", params={
+        "name": "leg_light1", "r": 255, "g": 0, "b": 0, "brightness": 255, "priority": 0,
+    }))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_led_calls == [{"name": "leg_light1", "r": 255, "g": 0, "b": 0, "brightness": 255, "priority": 0}]
+
+
+@pytest.mark.asyncio
+async def test_speak_command_calls_adapter(make_config):
+    acks = []
+    adapter = _StubAdapter()
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("SPEAK", params={"file_path": "/tmp/clip.wav"}))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.speak_calls == ["/tmp/clip.wav"]
