@@ -55,6 +55,31 @@ class DobotAdapter:
         self._require_connected()
         self._client.set_obstacle_avoidance(enabled)
 
+    async def change_mode(self) -> None:
+        self._require_connected()
+        self._client.change_mode()
+        self._robot_type = "wheel" if self._client.is_quad_wheel() else "quad"
+
+    async def set_speed_ratio(self, ratio: int) -> None:
+        self._require_connected()
+        self._client.set_speed_ratio(ratio)
+
+    async def send_velocity_sequence(self, steps, gait: str, speed_ratio: int) -> None:
+        self._require_connected()
+        self._client.velocity_sequence(steps, gait=gait, speed_ratio=speed_ratio, stand_down_after=False)
+
+    async def line_walk(self, direction: str, distance: float) -> None:
+        self._require_connected()
+        self._client.line_walk(direction, distance)
+
+    async def rotate(self, direction: str, angle: float) -> None:
+        self._require_connected()
+        self._client.rotate(direction, angle)
+
+    async def circle(self, direction: str, turns: int) -> None:
+        self._require_connected()
+        self._client.circle(direction, turns)
+
     async def get_telemetry_snapshot(self) -> TelemetrySnapshot:
         self._require_connected()
         state = self._client.get_state()

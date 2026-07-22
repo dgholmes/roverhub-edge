@@ -150,3 +150,57 @@ async def test_disconnect_closes_client_and_clears_state():
     await adapter.disconnect()
     with pytest.raises(RuntimeError):
         await adapter.get_sdk_state()
+
+
+@pytest.mark.asyncio
+async def test_change_mode_flips_robot_type():
+    client = FakeRobotClient(robot_type="quad")
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.change_mode()
+    assert client.robot_type == "wheel"
+
+
+@pytest.mark.asyncio
+async def test_set_speed_ratio_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.set_speed_ratio(75)
+    assert client.speed_ratio == 75
+
+
+@pytest.mark.asyncio
+async def test_send_velocity_sequence_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.send_velocity_sequence([(0.5, 0.0, 0.0, 0.25)], gait="walk", speed_ratio=60)
+    assert client.last_velocity_sequence == {"steps": [(0.5, 0.0, 0.0, 0.25)], "gait": "walk", "speed_ratio": 60}
+
+
+@pytest.mark.asyncio
+async def test_line_walk_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.line_walk("forward", 2.0)
+    assert client.last_line_walk == {"direction": "forward", "distance": 2.0}
+
+
+@pytest.mark.asyncio
+async def test_rotate_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.rotate("left", 45.0)
+    assert client.last_rotate == {"direction": "left", "angle": 45.0}
+
+
+@pytest.mark.asyncio
+async def test_circle_calls_client():
+    client = FakeRobotClient()
+    adapter = DobotAdapter(lambda: client)
+    await adapter.connect()
+    await adapter.circle("right", 2)
+    assert client.last_circle == {"direction": "right", "turns": 2}

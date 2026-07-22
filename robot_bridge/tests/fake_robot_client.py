@@ -54,6 +54,11 @@ class FakeRobotClient:
         self._pos: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self._vel: Tuple[float, float, float] = (0.0, 0.0, 0.0)
         self.safety_ready_called = False
+        self.speed_ratio = 50
+        self.last_velocity_sequence = None
+        self.last_line_walk = None
+        self.last_rotate = None
+        self.last_circle = None
 
     def enable_safety_ready(self) -> None:
         self.safety_ready_called = True
@@ -75,6 +80,30 @@ class FakeRobotClient:
 
     def set_obstacle_avoidance(self, enable: bool) -> FakeExecResponse:
         self._obstacle_avoidance = bool(enable)
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def change_mode(self):
+        self.robot_type = "wheel" if self.robot_type == "quad" else "quad"
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def set_speed_ratio(self, ratio: int):
+        self.speed_ratio = ratio
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def velocity_sequence(self, steps, gait="walk", speed_ratio=None, stand_down_after=True):
+        self.last_velocity_sequence = {"steps": steps, "gait": gait, "speed_ratio": speed_ratio}
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def line_walk(self, direction, distance=3.0):
+        self.last_line_walk = {"direction": direction, "distance": distance}
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def rotate(self, direction="left", angle=90.0):
+        self.last_rotate = {"direction": direction, "angle": angle}
+        return FakeExecResponse(success=True, current_state=self._state)
+
+    def circle(self, direction="left", turns=1):
+        self.last_circle = {"direction": direction, "turns": turns}
         return FakeExecResponse(success=True, current_state=self._state)
 
     def get_state(self) -> FakeStateResponse:
