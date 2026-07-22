@@ -26,8 +26,8 @@ class _FakeMqttClient:
     def disconnect(self):
         self.connected_to = None
 
-    def publish(self, topic, payload, qos=0):
-        self.published.append((topic, payload, qos))
+    def publish(self, topic, payload, qos=0, retain=False):
+        self.published.append((topic, payload, qos, retain))
 
     def subscribe(self, topic, qos=0):
         self.subscriptions.append((topic, qos))
@@ -49,10 +49,26 @@ def test_publish_registration_uses_admin_topic(make_config):
         make_config(bridge_id="bridge-x", site_id="site-x", robot_id="robot-x"), lambda: fake,
     )
     manager.publish_registration("wheel")
-    topic, payload, qos = fake.published[0]
+    topic, payload, qos, retain = fake.published[0]
     assert topic == "roverhub/admin/bridge-x/register"
     assert qos == 1
     assert json.loads(payload)["robot_type"] == "wheel"
+
+
+def test_publish_registration_is_retained(make_config):
+    """Regression test: a live backend was found with a permanently empty
+    robot registry despite telemetry/heartbeat flowing normally, because
+    registration was a one-shot, non-retained message and the registry only
+    ever creates a record from registration (mark_seen()/update_state()
+    only update an existing one). A late-subscribing backend must still
+    receive registration via MQTT's retained-message mechanism."""
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(
+        make_config(bridge_id="bridge-x", site_id="site-x", robot_id="robot-x"), lambda: fake,
+    )
+    manager.publish_registration("quad")
+    _, _, _, retain = fake.published[0]
+    assert retain is True
 
 
 def test_publish_telemetry_uses_site_robot_topic(make_config):
@@ -67,7 +83,7 @@ def test_publish_telemetry_uses_site_robot_topic(make_config):
         grpc_freshness="live", captured_at="2026-07-20T00:00:00Z",
     )
     manager.publish_telemetry(frame)
-    topic, payload, qos = fake.published[-1]
+    topic, payload, qos, retain = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/telemetry"
     assert qos == 0
 
@@ -80,7 +96,7 @@ def test_publish_state_uses_site_robot_state_topic(make_config):
         sdk_state="balance_stand", updated_at="2026-07-20T00:00:00Z",
     )
     manager.publish_state(update)
-    topic, payload, qos = fake.published[-1]
+    topic, payload, qos, retain = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/state"
     assert qos == 1
     assert json.loads(payload)["abstract_state"] == "STAND"
@@ -95,7 +111,7 @@ def test_publish_heartbeat_uses_site_robot_heartbeat_topic(make_config):
         cloud_connected=True, battery_pct=80.0, mission_active=False,
     )
     manager.publish_heartbeat(payload_obj)
-    topic, payload, qos = fake.published[-1]
+    topic, payload, qos, retain = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/heartbeat"
     assert qos == 0
 
@@ -129,7 +145,7 @@ def test_publish_ack_uses_site_robot_ack_topic(make_config):
         current_stage="execution_completed", initiated_by="operator-1",
     )
     manager.publish_ack(command)
-    topic, payload, qos = fake.published[-1]
+    topic, payload, qos, retain = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/ack"
     assert qos == 1
     assert json.loads(payload)["command_id"] == "cmd-1"

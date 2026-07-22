@@ -36,6 +36,16 @@ class ConnectionManager:
         self._client.disconnect()
 
     def publish_registration(self, robot_type: str) -> None:
+        # Retained so a backend that starts (or restarts) after this
+        # bridge already sent its registration still receives it -- the
+        # in-memory RobotRegistry only ever *creates* a record from this
+        # message (mark_seen()/update_state() only update an existing
+        # one), so a non-retained, one-shot registration was silently
+        # invisible to any late subscriber even while telemetry/heartbeat
+        # kept flowing normally. main.py also re-publishes this on every
+        # heartbeat tick as a second, retain-independent self-heal in case
+        # the broker itself doesn't persist retained messages across a
+        # restart (this project's mosquitto.conf sets persistence false).
         topic = f"roverhub/admin/{self._config.bridge_id}/register"
         payload = {
             "bridge_id": self._config.bridge_id,
@@ -43,7 +53,7 @@ class ConnectionManager:
             "robot_id": self._config.robot_id,
             "robot_type": robot_type,
         }
-        self._client.publish(topic, json.dumps(payload), qos=1)
+        self._client.publish(topic, json.dumps(payload), qos=1, retain=True)
 
     def publish_telemetry(self, frame: TelemetryFrame) -> None:
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/telemetry"

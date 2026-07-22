@@ -61,6 +61,13 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
         ))
 
     async def on_heartbeat(payload):
+        # Re-broadcast registration alongside every heartbeat, not just
+        # once at startup -- self-heals a backend that started (or
+        # restarted) after the one-shot startup registration, independent
+        # of whether the broker's retained-message support survives a
+        # broker restart (this project's mosquitto.conf sets persistence
+        # false, so a retained message alone wouldn't survive that case).
+        connection.publish_registration(robot_type)
         connection.publish_heartbeat(payload)
 
     sender = CommandSender(adapter, safety, on_ack=connection.publish_ack, battery_percent_provider=latest_battery.read)
