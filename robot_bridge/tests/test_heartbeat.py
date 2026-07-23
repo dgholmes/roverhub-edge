@@ -5,10 +5,11 @@ from shared.schemas.telemetry import TelemetrySnapshot
 
 
 class _StubAdapter:
-    def __init__(self, sdk_state="balance_stand", battery_percent=80.0, raise_on_state=False):
+    def __init__(self, sdk_state="balance_stand", battery_percent=80.0, raise_on_state=False, dds_connected=False):
         self._sdk_state = sdk_state
         self._battery_percent = battery_percent
         self._raise_on_state = raise_on_state
+        self.dds_connected = dds_connected
 
     async def get_sdk_state(self):
         if self._raise_on_state:
@@ -74,3 +75,27 @@ async def test_send_once_reports_empty_motions_when_adapter_raises(make_config):
     await sender.send_once()
 
     assert payloads[0].available_motions == []
+
+
+@pytest.mark.asyncio
+async def test_send_once_reports_dds_connected_from_adapter(make_config):
+    """Regression test: dds_connected was previously always hardcoded False
+    (no DDS integration existed); now that adapter.dds_connected is real
+    (subscribe_lower_state() sets it once a real message arrives), the
+    heartbeat must forward it rather than hardcoding either value itself."""
+    payloads = []
+    sender = HeartbeatSender(_StubAdapter(dds_connected=True), make_config(), payloads.append)
+
+    await sender.send_once()
+
+    assert payloads[0].dds_connected is True
+
+
+@pytest.mark.asyncio
+async def test_send_once_reports_dds_disconnected_by_default(make_config):
+    payloads = []
+    sender = HeartbeatSender(_StubAdapter(), make_config(), payloads.append)
+
+    await sender.send_once()
+
+    assert payloads[0].dds_connected is False

@@ -11,9 +11,11 @@ from config import BridgeConfig
 from connection_manager import ConnectionManager, real_mqtt_client_factory
 from dobot_adapter import DobotAdapter, real_client_factory
 from heartbeat import HeartbeatSender
+from low_level_reader import LowLevelReader
 from safety_manager import SafetyManager
 from shared.schemas.bridge_status import StateUpdate
 from shared.schemas.commands import Command
+from stream_manager import StreamManager
 from telemetry_reader import TelemetryReader
 
 logging.basicConfig(level=logging.INFO)
@@ -65,6 +67,26 @@ async def run(config: BridgeConfig | None = None, client_factory=None, mqtt_clie
     robot_type = await adapter.get_robot_config()
     connection.connect()
     connection.publish_registration(robot_type)
+
+    # Low-level (DDS) features -- video + IMU/motor/BMS telemetry -- only
+    # start when explicitly enabled (LOW_LEVEL_DDS_ENABLED=true), since
+    # dds_middleware_python isn't installed on gRPC-only hosts and importing
+    # it there would crash startup outright (see docs/09-low-level-sdk.md).
+    if config.low_level_enabled:
+        stream_manager = StreamManager(host=config.video_stream_host, port=config.video_stream_port)
+        stream_manager.start()
+        for camera in ("front", "back"):
+            await adapter.subscribe_rgb_frame(camera, stream_manager.frame_handler(camera))
+
+        low_level_reader = LowLevelReader(config, connection.publish_lower_state)
+        await adapter.subscribe_lower_state(low_level_reader.on_lower_state)
+
+        logger.info(
+            "low-level DDS features started: video on http://%s:%s/video/{front,back}, lower_state telemetry at %sHz",
+            config.video_stream_host, stream_manager.port, config.lower_state_publish_hz,
+        )
+    else:
+        logger.info("low_level_enabled is off -- video and IMU/motor/BMS telemetry will not be available")
 
     async def on_frame(frame):
         connection.publish_telemetry(frame)

@@ -6,6 +6,7 @@ from typing import Callable, Tuple
 from config import BridgeConfig
 from shared.schemas.bridge_status import HeartbeatPayload, StateUpdate
 from shared.schemas.commands import Command
+from shared.schemas.low_level_telemetry import LowerStateFrame
 from shared.schemas.telemetry import TelemetryFrame
 
 MqttClientFactory = Callable[[], object]
@@ -74,6 +75,14 @@ class ConnectionManager:
     def publish_heartbeat(self, payload: HeartbeatPayload) -> None:
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/heartbeat"
         self._client.publish(topic, payload.model_dump_json(), qos=0)
+
+    def publish_lower_state(self, frame: LowerStateFrame) -> None:
+        # Only ever published when low_level_enabled is on (DDS wired up on
+        # a Jetson/Raspberry Pi) -- see low_level_reader.py. qos=0 like
+        # telemetry: this is decimated but still relatively high-frequency
+        # (IMU/motor state), not worth guaranteed delivery.
+        topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/lower_state"
+        self._client.publish(topic, frame.model_dump_json(), qos=0)
 
     def subscribe_commands(self, on_command: Callable[[bytes], None]) -> None:
         topic = f"roverhub/{self._config.site_id}/{self._config.robot_id}/commands"

@@ -1,0 +1,8 @@
+opencv-python
+numpy
+pytest>=7,<9
+
+# dds_middleware_python and cyclonedds are NOT on PyPI -- install from the
+# vendored .whl in vendor/dobot_quad_sdk/dist/ (see docs/09-low-level-sdk.md):
+#   pip install ../vendor/dobot_quad_sdk/dist/dds_middleware_python-*.whl
+#   pip install cyclonedds

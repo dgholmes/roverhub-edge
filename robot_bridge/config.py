@@ -19,6 +19,17 @@ class BridgeConfig:
     stale_telemetry_threshold_s: float
     cmd_timeout_s: float
     reconnect_backoff_max_s: float
+    # Low-level (DDS) features -- video + IMU/motor/BMS telemetry -- require
+    # dds_middleware_python, which only installs on Linux/aarch64 or
+    # Linux/x86_64 hosts with the vendored .whl (see docs/09-low-level-sdk.md).
+    # Defaults to disabled so existing gRPC-only deployments (e.g. this dev
+    # machine) don't crash on startup trying to import a module that isn't
+    # there -- must be explicitly enabled once running on a Jetson/Raspberry
+    # Pi wired to the robot's DDS network.
+    low_level_enabled: bool = False
+    lower_state_publish_hz: float = 5.0
+    video_stream_host: str = "0.0.0.0"
+    video_stream_port: int = 8090
 
     @staticmethod
     def from_env() -> "BridgeConfig":
@@ -36,4 +47,8 @@ class BridgeConfig:
             stale_telemetry_threshold_s=float(os.environ.get("STALE_TELEMETRY_THRESHOLD_S", "3.0")),
             cmd_timeout_s=float(os.environ.get("CMD_TIMEOUT_S", "10.0")),
             reconnect_backoff_max_s=float(os.environ.get("RECONNECT_BACKOFF_MAX_S", "60.0")),
+            low_level_enabled=os.environ.get("LOW_LEVEL_DDS_ENABLED", "false").lower() == "true",
+            lower_state_publish_hz=float(os.environ.get("LOWER_STATE_PUBLISH_HZ", "5.0")),
+            video_stream_host=os.environ.get("VIDEO_STREAM_HOST", "0.0.0.0"),
+            video_stream_port=int(os.environ.get("VIDEO_STREAM_PORT", "8090")),
         )

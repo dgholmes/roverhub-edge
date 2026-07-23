@@ -4,6 +4,7 @@ from connection_manager import ConnectionManager
 from shared.schemas.telemetry import TelemetryFrame
 from shared.schemas.bridge_status import HeartbeatPayload, StateUpdate
 from shared.schemas.commands import Command
+from shared.schemas.low_level_telemetry import ImuState, LowerStateFrame, MotorState
 
 
 class _FakeMqttClient:
@@ -135,6 +136,23 @@ def test_publish_heartbeat_uses_site_robot_heartbeat_topic(make_config):
     topic, payload, qos, retain = fake.published[-1]
     assert topic == "roverhub/site-x/robot-x/heartbeat"
     assert qos == 0
+
+
+def test_publish_lower_state_uses_site_robot_lower_state_topic(make_config):
+    fake = _FakeMqttClient()
+    manager = ConnectionManager(make_config(site_id="site-x", robot_id="robot-x"), lambda: fake)
+    frame = LowerStateFrame(
+        robot_id="robot-x", site_id="site-x",
+        imu=ImuState(quaternion=(1, 0, 0, 0), gyroscope=(0, 0, 0), accelerometer=(0, 0, 9.8), rpy=(0, 0, 0)),
+        motors=[MotorState(mode=4, q=0, dq=0, ddq=0, tau_est=0, q_raw=0, dq_raw=0, ddq_raw=0, motor_temp=30) for _ in range(16)],
+        battery_level=80,
+        captured_at="2026-07-24T00:00:00Z",
+    )
+    manager.publish_lower_state(frame)
+    topic, payload, qos, retain = fake.published[-1]
+    assert topic == "roverhub/site-x/robot-x/lower_state"
+    assert qos == 0
+    assert json.loads(payload)["battery_level"] == 80
 
 
 def test_subscribe_commands_subscribes_to_commands_topic(make_config):

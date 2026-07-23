@@ -17,8 +17,10 @@ HeartbeatHandler = Callable[[HeartbeatPayload], Awaitable[None]]
 
 class HeartbeatSender:
     """Periodically reports bridge + connection health to the cloud on the
-    heartbeat topic (docs/04-edge-bridge.md SS3.10). No DDS integration
-    exists this round, so dds_connected is always False."""
+    heartbeat topic (docs/04-edge-bridge.md SS3.10). dds_connected reflects
+    adapter.dds_connected -- real once low_level_enabled is on and at least
+    one rt/lower/state message has arrived; always False on gRPC-only
+    hosts, since there's nothing else that would ever set it."""
 
     def __init__(self, adapter: DobotAdapter, config: BridgeConfig, on_heartbeat: HeartbeatHandler):
         self._adapter = adapter
@@ -57,7 +59,7 @@ class HeartbeatSender:
             site_id=self._config.site_id,
             timestamp=datetime.now(timezone.utc).isoformat(),
             sdk_connected=sdk_connected,
-            dds_connected=False,
+            dds_connected=self._adapter.dds_connected,
             cloud_connected=True,
             battery_pct=battery_pct,
             mission_active=False,

@@ -12,6 +12,23 @@ async def test_connect_detects_quad_type():
 
 
 @pytest.mark.asyncio
+async def test_dds_connected_false_until_first_lower_state_message():
+    from fake_dds_middleware import FakePyDDSMiddleware, FakeLowerStateData
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+
+    assert adapter.dds_connected is False
+
+    await adapter.subscribe_lower_state(lambda imu, motors, battery_level: None)
+    assert adapter.dds_connected is False  # subscribed, but no message has arrived yet
+
+    middleware.subscriptions["rt/lower/state"](FakeLowerStateData(battery_level=80))
+    assert adapter.dds_connected is True
+
+
+@pytest.mark.asyncio
 async def test_connect_detects_wheel_type():
     adapter = DobotAdapter(lambda: FakeRobotClient(robot_type="wheel"))
     await adapter.connect()
@@ -368,3 +385,116 @@ async def test_speak_publishes_file_path():
     assert published.type() == "file"
     assert published.data() == []
     assert published.flag() is False
+
+
+@pytest.mark.asyncio
+async def test_subscribe_lower_state_translates_imu_motors_and_battery():
+    from fake_dds_middleware import FakePyDDSMiddleware, FakeLowerStateData, FakeMotorStateData
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+
+    received = []
+    await adapter.subscribe_lower_state(lambda imu, motors, battery_level: received.append((imu, motors, battery_level)))
+
+    assert "rt/lower/state" in middleware.subscriptions
+    fake_state = FakeLowerStateData(
+        motors=[FakeMotorStateData(mode=4, q=i * 0.1, motor_temp=30 + i) for i in range(16)],
+        battery_level=72,
+    )
+    middleware.subscriptions["rt/lower/state"](fake_state)
+
+    assert len(received) == 1
+    imu, motors, battery_level = received[0]
+    assert imu.accelerometer == (0.0, 0.0, 9.8)
+    assert len(motors) == 16
+    assert motors[5].q == pytest.approx(0.5)
+    assert motors[5].motor_temp == 35
+    assert battery_level == 72
+
+
+@pytest.mark.asyncio
+async def test_subscribe_lower_state_caches_battery_for_telemetry_snapshot():
+    """Regression test: get_telemetry_snapshot() previously always reported
+    battery_percent=0.0 on the real robot (no gRPC field exists) -- once a
+    real DDS BMS reading arrives via subscribe_lower_state(), it must use
+    that instead."""
+    from fake_dds_middleware import FakePyDDSMiddleware, FakeLowerStateData
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+    await adapter.subscribe_lower_state(lambda imu, motors, battery_level: None)
+
+    middleware.subscriptions["rt/lower/state"](FakeLowerStateData(battery_level=63))
+
+    snapshot = await adapter.get_telemetry_snapshot()
+    assert snapshot.battery_percent == 63.0
+
+
+@pytest.mark.asyncio
+async def test_subscribe_rgb_frame_passes_through_jpeg_bytes_unmodified():
+    from fake_dds_middleware import FakePyDDSMiddleware, FakeCompressedImageData
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+
+    received = []
+    await adapter.subscribe_rgb_frame("front", lambda jpeg_bytes, frame_id: received.append((jpeg_bytes, frame_id)))
+
+    assert "rt/camera/camera2/image_compressed" in middleware.subscriptions
+    middleware.subscriptions["rt/camera/camera2/image_compressed"](
+        FakeCompressedImageData(data=b"\xff\xd8\xff\xe0fakejpeg", frame_id="camera2_optical_frame"),
+    )
+
+    assert received == [(b"\xff\xd8\xff\xe0fakejpeg", "camera2_optical_frame")]
+
+
+@pytest.mark.asyncio
+async def test_subscribe_rgb_frame_back_camera_uses_camera3_topic():
+    from fake_dds_middleware import FakePyDDSMiddleware
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+
+    await adapter.subscribe_rgb_frame("back", lambda jpeg_bytes, frame_id: None)
+
+    assert "rt/camera/camera3/image_compressed" in middleware.subscriptions
+
+
+@pytest.mark.asyncio
+async def test_subscribe_depth_frame_passes_through_raw_fields():
+    from fake_dds_middleware import FakePyDDSMiddleware, FakeImageData
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+
+    received = []
+    await adapter.subscribe_depth_frame("front", lambda w, h, enc, data: received.append((w, h, enc, data)))
+
+    middleware.subscriptions["rt/camera/camera2/image_depth"](
+        FakeImageData(width=640, height=480, encoding="16UC1", data=b"\x00\x01"),
+    )
+
+    assert received == [(640, 480, "16UC1", b"\x00\x01")]
+
+
+@pytest.mark.asyncio
+async def test_subscribe_voice_state_passes_through_audio_and_angle():
+    from fake_dds_middleware import FakePyDDSMiddleware, FakeVoiceStateData
+
+    middleware = FakePyDDSMiddleware(0)
+    adapter = DobotAdapter(lambda: FakeRobotClient(), dds_middleware_factory=lambda: middleware)
+    await adapter.connect()
+
+    received = []
+    await adapter.subscribe_voice_state(lambda pcm_bytes, angle_deg: received.append((pcm_bytes, angle_deg)))
+
+    assert "rt/voice/state" in middleware.subscriptions
+    middleware.subscriptions["rt/voice/state"](FakeVoiceStateData(data=b"\x00\x00\x01\x01", angle=42.5))
+
+    assert received == [(b"\x00\x00\x01\x01", 42.5)]
