@@ -79,6 +79,9 @@ def test_publish_telemetry_uses_site_robot_topic(make_config):
     frame = TelemetryFrame(
         robot_id="robot-x", site_id="site-x", robot_type="quad",
         pos_body=(0.0, 0.0, 0.0), vel_body=(0.0, 0.0, 0.0),
+        acc_body=(0.0, 0.0, 0.0), omega_body=(0.0, 0.0, 0.0), ori_body=(0.0, 0.0, 0.0),
+        jpos_leg=[0.0] * 12, jvel_leg=[0.0] * 12, jtau_leg=[0.0] * 12,
+        grf_left=(0.0, 0.0, 0.0), grf_right=(0.0, 0.0, 0.0),
         speed_ratio=0, battery_percent=80.0, obstacle_avoidance_enabled=True,
         grpc_freshness="live", captured_at="2026-07-20T00:00:00Z",
     )

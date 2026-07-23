@@ -235,6 +235,14 @@ class DobotAdapter:
             robot_type=self._robot_type,
             pos_body=tuple(state.robot_state.pos_body),
             vel_body=tuple(state.robot_state.vel_body),
+            acc_body=tuple(state.robot_state.acc_body),
+            omega_body=tuple(state.robot_state.omega_body),
+            ori_body=tuple(state.robot_state.ori_body),
+            jpos_leg=list(state.robot_state.jpos_leg),
+            jvel_leg=list(state.robot_state.jvel_leg),
+            jtau_leg=list(state.robot_state.jtau_leg),
+            grf_left=tuple(state.robot_state.grf_left),
+            grf_right=tuple(state.robot_state.grf_right),
             # Battery has no gRPC field -- it's only available via the DDS BMS
             # subscription (e6_bms_state_sub.py), which is out of scope this
             # round (no DDS integration). FakeRobotClient exposes a

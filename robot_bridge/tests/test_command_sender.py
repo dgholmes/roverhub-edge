@@ -198,6 +198,23 @@ async def test_set_state_command_calls_adapter(make_config):
 
 
 @pytest.mark.asyncio
+async def test_set_gait_command_calls_adapter_set_state(make_config):
+    """Regression test: SET_GAIT was previously excluded from
+    WIRED_COMMAND_TYPES on the mistaken assumption it needed continuous
+    velocity control like DRIVE. Gait names are just SDK target-state names
+    (walk/flying_trot/wheel_loco/...), so it reuses set_state()."""
+    acks = []
+    adapter = _StubAdapter(sdk_state="balance_stand")
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("SET_GAIT", params={"gait": "flying_trot"}))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_state_calls == ["flying_trot"]
+
+
+@pytest.mark.asyncio
 async def test_change_mode_command_calls_adapter(make_config):
     acks = []
     adapter = _StubAdapter()

@@ -20,6 +20,9 @@ class _StubAdapter:
             current_state=self._sdk_state, current_speed_ratio=0,
             obstacle_avoidance_enabled=True, robot_type="quad",
             pos_body=(0.0, 0.0, 0.0), vel_body=(0.0, 0.0, 0.0),
+            acc_body=(0.0, 0.0, 0.0), omega_body=(0.0, 0.0, 0.0), ori_body=(0.0, 0.0, 0.0),
+            jpos_leg=[0.0] * 12, jvel_leg=[0.0] * 12, jtau_leg=[0.0] * 12,
+            grf_left=(0.0, 0.0, 0.0), grf_right=(0.0, 0.0, 0.0),
             battery_percent=self._battery_percent, captured_at="2026-07-20T00:00:00Z",
         )
 

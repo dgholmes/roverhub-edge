@@ -98,6 +98,13 @@ class CommandSender:
             pass  # backend-only concept -- no SDK call
         elif command.type == "SET_STATE":
             await self._adapter.set_state(params["state"])
+        elif command.type == "SET_GAIT":
+            # Gait names are SDK target-state names (walk/flying_trot/rl on
+            # quad, wheel_loco/drift on wheel) -- set_target_state() handles
+            # the actual FSM transition; an unsupported gait for the current
+            # robot type raises ValueError, caught by handle_command() same
+            # as any other execution failure.
+            await self._adapter.set_state(params["gait"])
         elif command.type == "CHANGE_MODE":
             await self._adapter.change_mode()
         elif command.type == "SET_SPEED_RATIO":

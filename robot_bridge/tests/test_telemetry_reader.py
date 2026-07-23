@@ -22,6 +22,9 @@ def _snapshot(captured_at="2026-07-20T00:00:00Z", current_state="stand_down"):
         current_state=current_state, current_speed_ratio=0,
         obstacle_avoidance_enabled=True, robot_type="quad",
         pos_body=(0.0, 0.0, 0.0), vel_body=(0.0, 0.0, 0.0),
+        acc_body=(0.0, 0.0, 0.0), omega_body=(0.0, 0.0, 0.0), ori_body=(0.0, 0.0, 0.0),
+        jpos_leg=[0.0] * 12, jvel_leg=[0.0] * 12, jtau_leg=[0.0] * 12,
+        grf_left=(0.0, 0.0, 0.0), grf_right=(0.0, 0.0, 0.0),
         battery_percent=80.0, captured_at=captured_at,
     )
 
@@ -129,6 +132,38 @@ async def test_on_state_change_does_not_fire_when_state_is_unchanged(make_config
     await reader.poll_once()
 
     assert len(state_changes) == 1
+
+
+@pytest.mark.asyncio
+async def test_poll_once_propagates_full_body_and_joint_telemetry(make_config):
+    """Regression test: pos_body/vel_body were the only fields telemetry_reader
+    copied from the snapshot into the published frame, even after get_state()
+    started returning acc_body/omega_body/ori_body/jpos_leg/jvel_leg/jtau_leg/
+    grf_left/grf_right -- those fields were silently dropped at this hop."""
+    frames = []
+    snapshot = TelemetrySnapshot(
+        current_state="walk", current_speed_ratio=50,
+        obstacle_avoidance_enabled=True, robot_type="quad",
+        pos_body=(1.0, 2.0, 0.0), vel_body=(0.5, 0.0, 0.0),
+        acc_body=(0.1, 0.0, 0.0), omega_body=(0.0, 0.0, 0.2), ori_body=(0.0, 0.01, 0.0),
+        jpos_leg=[0.1] * 12, jvel_leg=[0.2] * 12, jtau_leg=[0.3] * 12,
+        grf_left=(1.0, 2.0, 3.0), grf_right=(4.0, 5.0, 6.0),
+        battery_percent=80.0, captured_at="2026-07-23T00:00:00Z",
+    )
+    adapter = _StubAdapter([snapshot])
+    reader = TelemetryReader(adapter, make_config(), frames.append, clock=lambda: datetime.now(timezone.utc))
+
+    await reader.poll_once()
+
+    frame = frames[0]
+    assert frame.acc_body == (0.1, 0.0, 0.0)
+    assert frame.omega_body == (0.0, 0.0, 0.2)
+    assert frame.ori_body == (0.0, 0.01, 0.0)
+    assert frame.jpos_leg == [0.1] * 12
+    assert frame.jvel_leg == [0.2] * 12
+    assert frame.jtau_leg == [0.3] * 12
+    assert frame.grf_left == (1.0, 2.0, 3.0)
+    assert frame.grf_right == (4.0, 5.0, 6.0)
 
 
 @pytest.mark.asyncio

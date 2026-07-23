@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import List, Tuple
 
 # State names from docs/03-sdk-integration.md section 7.1 (quad) and 7.2 (wheel).
 # Hand-rolled rather than imported from dobot_quad so this test fixture never
@@ -18,6 +18,14 @@ VALID_STATES = {
 class FakeRobotState:
     pos_body: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     vel_body: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    acc_body: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    omega_body: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    ori_body: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    jpos_leg: List[float] = field(default_factory=lambda: [0.0] * 12)
+    jvel_leg: List[float] = field(default_factory=lambda: [0.0] * 12)
+    jtau_leg: List[float] = field(default_factory=lambda: [0.0] * 12)
+    grf_left: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    grf_right: Tuple[float, float, float] = (0.0, 0.0, 0.0)
 
 
 @dataclass

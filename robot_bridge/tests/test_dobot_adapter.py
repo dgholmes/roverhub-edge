@@ -86,6 +86,14 @@ async def test_get_telemetry_snapshot_lowercases_real_sdk_uppercase_current_stat
     class _RealShapedRobotState:
         pos_body = (0.0, 0.0, 0.0)
         vel_body = (0.0, 0.0, 0.0)
+        acc_body = (0.0, 0.0, 0.0)
+        omega_body = (0.0, 0.0, 0.0)
+        ori_body = (0.0, 0.0, 0.0)
+        jpos_leg = [0.0] * 12
+        jvel_leg = [0.0] * 12
+        jtau_leg = [0.0] * 12
+        grf_left = (0.0, 0.0, 0.0)
+        grf_right = (0.0, 0.0, 0.0)
 
     class _UppercaseStateResponse:
         current_state = "PASSIVE"
@@ -118,6 +126,14 @@ async def test_get_telemetry_snapshot_defaults_battery_when_client_lacks_it():
     class _RealShapedRobotState:
         pos_body = (1.0, 2.0, 0.0)
         vel_body = (0.0, 0.0, 0.0)
+        acc_body = (0.0, 0.0, 0.0)
+        omega_body = (0.0, 0.0, 0.0)
+        ori_body = (0.0, 0.0, 0.0)
+        jpos_leg = [0.0] * 12
+        jvel_leg = [0.0] * 12
+        jtau_leg = [0.0] * 12
+        grf_left = (0.0, 0.0, 0.0)
+        grf_right = (0.0, 0.0, 0.0)
 
     class _RealShapedStateResponse:
         current_state = "balance_stand"
