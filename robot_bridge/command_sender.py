@@ -109,7 +109,17 @@ class CommandSender:
             target_gait = "wheel_loco" if robot_type == "wheel" else "walk"
             await self._adapter.set_state(target_gait)
         elif command.type == "RELEASE_CONTROL":
-            pass  # backend-only concept -- no SDK call
+            # Mirrors TAKE_CONTROL: abstract_state is derived purely from
+            # sdk_state (state_machine.compute_abstract_state), which keeps
+            # reporting MANUAL/ASSISTED for as long as sdk_state stays in
+            # WALK_SDK_STATES -- this was previously a no-op, so the robot
+            # never actually left "walk" and the frontend's abstract_state
+            # never left MANUAL/ASSISTED. That kept ManualControlOverlay
+            # mounted forever, and its own auto-release timer kept re-firing
+            # RELEASE_CONTROL every timeout period indefinitely. Explicitly
+            # transitioning back to balance_stand (STAND) is what actually
+            # ends manual control from the robot's perspective.
+            await self._adapter.set_state(RECOVERY_TARGET_STATE)
         elif command.type == "SET_STATE":
             await self._adapter.set_state(params["state"])
         elif command.type == "SET_GAIT":

@@ -194,6 +194,26 @@ async def test_take_control_completes_even_if_sdk_state_query_fails(make_config)
 
 
 @pytest.mark.asyncio
+async def test_release_control_transitions_back_to_balance_stand(make_config):
+    """Regression test: RELEASE_CONTROL used to be a no-op, so sdk_state
+    stayed "walk" forever -- state_machine.compute_abstract_state derives
+    abstract_state purely from sdk_state, so the frontend's abstract_state
+    never left MANUAL/ASSISTED, ManualControlOverlay never unmounted, and
+    its auto-release timer kept re-firing RELEASE_CONTROL every timeout
+    period forever (observed live as a growing stack of stuck "Release
+    Control (auto-timeout)" toasts)."""
+    acks = []
+    adapter = _StubAdapter(sdk_state="walk")
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("RELEASE_CONTROL"))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_state_calls == ["balance_stand"]
+
+
+@pytest.mark.asyncio
 async def test_low_battery_rejects_and_reports_failure_reason(make_config):
     acks = []
     adapter = _StubAdapter(sdk_state="balance_stand")
