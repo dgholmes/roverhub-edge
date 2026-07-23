@@ -145,14 +145,15 @@ async def test_set_obstacle_avoidance_toggles_adapter(make_config):
 
 
 @pytest.mark.asyncio
-async def test_take_control_transitions_quad_to_walk(make_config):
+async def test_take_control_transitions_quad_through_balance_stand_to_walk(make_config):
     """Regression test: TAKE_CONTROL used to be a no-op ("backend-only
     concept -- no SDK call"), so the robot stayed at balance_stand even
     though abstract_state flipped to MANUAL/ASSISTED -- every subsequent
-    VELOCITY_SEQUENCE drive burst had nothing to move from. commandPolicy.ts
-    only allows TAKE_CONTROL from abstract_state STAND (sdk_state
-    balance_stand), matching the SDK's own combo-sequence example of calling
-    walk() directly after balance_stand() (high_level.md E9)."""
+    VELOCITY_SEQUENCE drive burst had nothing to move from. Runs the SDK's
+    own documented warm-up chain (balance_stand() then walk(), high_level.md
+    E9) rather than assuming the robot is already standing -- commandPolicy.ts
+    now allows TAKE_CONTROL from PASSIVE (stand_down) too, not just STAND, so
+    the operator doesn't have to separately click Stand first."""
     acks = []
     adapter = _StubAdapter(sdk_state="balance_stand")
     safety = SafetyManager(make_config())
@@ -161,7 +162,22 @@ async def test_take_control_transitions_quad_to_walk(make_config):
     await sender.handle_command(_command("TAKE_CONTROL"))
 
     assert acks[-1].current_stage == "execution_completed"
-    assert adapter.set_state_calls == ["walk"]
+    assert adapter.set_state_calls == ["balance_stand", "walk"]
+
+
+@pytest.mark.asyncio
+async def test_take_control_transitions_quad_from_stand_down(make_config):
+    """The whole point of the two-step chain: starting from stand_down
+    (PASSIVE) must reach walk without the operator clicking Stand first."""
+    acks = []
+    adapter = _StubAdapter(sdk_state="stand_down")
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("TAKE_CONTROL"))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_state_calls == ["balance_stand", "walk"]
 
 
 @pytest.mark.asyncio
@@ -190,7 +206,7 @@ async def test_take_control_completes_even_if_sdk_state_query_fails(make_config)
     await sender.handle_command(_command("TAKE_CONTROL"))
 
     assert acks[-1].current_stage == "execution_completed"
-    assert adapter.set_state_calls == ["walk"]
+    assert adapter.set_state_calls == ["balance_stand", "walk"]
 
 
 @pytest.mark.asyncio

@@ -98,16 +98,24 @@ class CommandSender:
             enabled = bool(params.get("enabled", True))
             await self._adapter.enable_obstacle_avoidance(enabled)
         elif command.type == "TAKE_CONTROL":
-            # commandPolicy.ts only allows TAKE_CONTROL from abstract_state
-            # STAND (sdk_state balance_stand), matching the SDK's own
-            # combo-sequence example (balance_stand() then walk() directly,
-            # high_level.md E9) -- so the robot must still transition into a
-            # walk-capable FSM state here, or every subsequent
-            # VELOCITY_SEQUENCE burst has nothing to move from. Without this
-            # the abstract_state flipped to MANUAL/ASSISTED but the SDK
-            # itself never left balance_stand, so driving did nothing.
-            target_gait = "wheel_loco" if robot_type == "wheel" else "walk"
-            await self._adapter.set_state(target_gait)
+            # commandPolicy.ts allows TAKE_CONTROL from STAND (balance_stand)
+            # or PASSIVE (stand_down) -- the operator shouldn't have to
+            # separately click Stand first. For quad robots this runs the
+            # SDK's own documented warm-up chain (balance_stand() then
+            # walk(), high_level.md E9) so it works the same whether
+            # starting from stand_down or already standing (a redundant
+            # balance_stand call when already standing is harmless).
+            # Without the walk() step, abstract_state would flip to
+            # MANUAL/ASSISTED but the SDK itself would stay at balance_stand,
+            # so every subsequent VELOCITY_SEQUENCE burst would have nothing
+            # to move from. Wheel robots have no equivalent balance stage in
+            # their FSM (docs/03-sdk-integration.md SS7.2's wheeled state
+            # list has no balance_stand) -- wheel_loco is the direct target.
+            if robot_type == "wheel":
+                await self._adapter.set_state("wheel_loco")
+            else:
+                await self._adapter.set_state(RECOVERY_TARGET_STATE)
+                await self._adapter.set_state("walk")
         elif command.type == "RELEASE_CONTROL":
             # Mirrors TAKE_CONTROL: abstract_state is derived purely from
             # sdk_state (state_machine.compute_abstract_state), which keeps
