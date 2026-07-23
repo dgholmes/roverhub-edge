@@ -145,7 +145,43 @@ async def test_set_obstacle_avoidance_toggles_adapter(make_config):
 
 
 @pytest.mark.asyncio
-async def test_take_control_completes_without_sdk_call(make_config):
+async def test_take_control_transitions_quad_to_walk(make_config):
+    """Regression test: TAKE_CONTROL used to be a no-op ("backend-only
+    concept -- no SDK call"), so the robot stayed at balance_stand even
+    though abstract_state flipped to MANUAL/ASSISTED -- every subsequent
+    VELOCITY_SEQUENCE drive burst had nothing to move from. commandPolicy.ts
+    only allows TAKE_CONTROL from abstract_state STAND (sdk_state
+    balance_stand), matching the SDK's own combo-sequence example of calling
+    walk() directly after balance_stand() (high_level.md E9)."""
+    acks = []
+    adapter = _StubAdapter(sdk_state="balance_stand")
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("TAKE_CONTROL"))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_state_calls == ["walk"]
+
+
+@pytest.mark.asyncio
+async def test_take_control_transitions_wheel_robot_to_wheel_loco(make_config):
+    acks = []
+    adapter = _StubAdapter(sdk_state="balance_stand")
+    adapter.robot_type = "wheel"
+    safety = SafetyManager(make_config())
+    sender = CommandSender(adapter, safety, acks.append, battery_percent_provider=lambda: 80.0)
+
+    await sender.handle_command(_command("TAKE_CONTROL"))
+
+    assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_state_calls == ["wheel_loco"]
+
+
+@pytest.mark.asyncio
+async def test_take_control_completes_even_if_sdk_state_query_fails(make_config):
+    """TAKE_CONTROL's walk transition depends only on robot_type, not
+    sdk_state -- it must still succeed if get_sdk_state() itself fails."""
     acks = []
     adapter = _StubAdapter(raise_on_get_state=True)
     safety = SafetyManager(make_config())
@@ -154,6 +190,7 @@ async def test_take_control_completes_without_sdk_call(make_config):
     await sender.handle_command(_command("TAKE_CONTROL"))
 
     assert acks[-1].current_stage == "execution_completed"
+    assert adapter.set_state_calls == ["walk"]
 
 
 @pytest.mark.asyncio

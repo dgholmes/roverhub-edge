@@ -70,7 +70,7 @@ class CommandSender:
         self._advance(command, "local_safety_check")
 
         try:
-            await self._execute(command, sdk_state, check.clamped_speed_ratio)
+            await self._execute(command, sdk_state, check.clamped_speed_ratio, robot_type)
         except Exception as exc:
             command.failure_reason = str(exc)
             self._advance(command, "execution_failed")
@@ -81,7 +81,10 @@ class CommandSender:
         self._advance(command, "execution_started")
         self._advance(command, "execution_completed")
 
-    async def _execute(self, command: Command, sdk_state: Optional[str], clamped_speed_ratio: Optional[int]) -> None:
+    async def _execute(
+        self, command: Command, sdk_state: Optional[str], clamped_speed_ratio: Optional[int],
+        robot_type: Optional[str],
+    ) -> None:
         params = command.params or {}
         if command.type == "ESTOP":
             self._safety.trigger_estop()
@@ -94,7 +97,18 @@ class CommandSender:
         elif command.type == "SET_OBSTACLE_AVOIDANCE":
             enabled = bool(params.get("enabled", True))
             await self._adapter.enable_obstacle_avoidance(enabled)
-        elif command.type in ("TAKE_CONTROL", "RELEASE_CONTROL"):
+        elif command.type == "TAKE_CONTROL":
+            # commandPolicy.ts only allows TAKE_CONTROL from abstract_state
+            # STAND (sdk_state balance_stand), matching the SDK's own
+            # combo-sequence example (balance_stand() then walk() directly,
+            # high_level.md E9) -- so the robot must still transition into a
+            # walk-capable FSM state here, or every subsequent
+            # VELOCITY_SEQUENCE burst has nothing to move from. Without this
+            # the abstract_state flipped to MANUAL/ASSISTED but the SDK
+            # itself never left balance_stand, so driving did nothing.
+            target_gait = "wheel_loco" if robot_type == "wheel" else "walk"
+            await self._adapter.set_state(target_gait)
+        elif command.type == "RELEASE_CONTROL":
             pass  # backend-only concept -- no SDK call
         elif command.type == "SET_STATE":
             await self._adapter.set_state(params["state"])
